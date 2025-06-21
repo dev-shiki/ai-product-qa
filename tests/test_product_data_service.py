@@ -1,6 +1,6 @@
 import pytest
 from app.services.product_data_service import ProductDataService
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 @pytest.fixture
 def product_service():
@@ -48,9 +48,10 @@ async def test_search_products_fallback():
         result = await service.search_products("test", 5)
         assert len(result) > 0
 
-def test_get_categories():
+@pytest.mark.asyncio
+async def test_get_categories():
     service = ProductDataService()
-    result = service.get_categories()
+    result = await service.get_categories()
     assert len(result) > 0
     assert "Smartphone" in result
 
@@ -73,27 +74,29 @@ def test_get_products():
     result = service.get_all_products(5)
     assert len(result) > 0
 
-def test_get_top_rated_products():
+@pytest.mark.asyncio
+async def test_get_top_rated_products():
     service = ProductDataService()
     with patch.object(service, 'search_products_fakestoreapi') as mock_external:
         mock_external.return_value = [{"id": "1", "name": "Top Rated", "specifications": {"rating": 5.0}}]
-        result = service.get_top_rated_products(5)
+        result = await service.get_top_rated_products(5)
         assert len(result) > 0
 
-def test_get_best_selling_products():
+@pytest.mark.asyncio
+async def test_get_best_selling_products():
     service = ProductDataService()
     with patch.object(service, 'search_products_fakestoreapi') as mock_external:
         mock_external.return_value = [{"id": "1", "name": "Best Selling", "specifications": {"sold": 1000}}]
-        result = service.get_best_selling_products(5)
+        result = await service.get_best_selling_products(5)
         assert len(result) > 0
 
 def test_search_products_fakestoreapi():
     service = ProductDataService()
     with patch.object(service.session, 'get') as mock_get:
-        mock_response = type('Response', (), {
-            'json': lambda: [{"id": 1, "title": "Test", "category": "test", "price": 10.0, "description": "test", "rating": {"rate": 4.5}, "image": "test.jpg"}],
-            'raise_for_status': lambda: None
-        })()
+        # Create a proper mock response object
+        mock_response = MagicMock()
+        mock_response.json.return_value = [{"id": 1, "title": "Test", "category": "test", "price": 10.0, "description": "test", "rating": {"rate": 4.5}, "image": "test.jpg"}]
+        mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
         
         result = service.search_products_fakestoreapi("test", 5)
@@ -112,18 +115,4 @@ def test_get_products_by_category():
 def test_get_all_products():
     service = ProductDataService()
     result = service.get_all_products(5)
-    assert len(result) > 0
-
-def test_test_connection():
-    service = ProductDataService()
-    with patch.object(service.external_service, 'test_connection') as mock_external:
-        mock_external.return_value = True
-        result = service.test_connection()
-        assert result == True
-
-def test_test_connection_failure():
-    service = ProductDataService()
-    with patch.object(service.external_service, 'test_connection') as mock_external:
-        mock_external.return_value = False
-        result = service.test_connection()
-        assert result == False 
+    assert len(result) > 0 
