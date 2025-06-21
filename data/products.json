@@ -1,0 +1,75 @@
+{
+  "products": [
+    {
+      "id": "P001",
+      "name": "iPhone 15 Pro",
+      "category": "smartphone",
+      "brand": "Apple",
+      "price": 18999000,
+      "currency": "IDR",
+      "specifications": {
+        "storage": "128GB, 256GB, 512GB, 1TB",
+        "camera": "48MP main, 12MP ultrawide, 12MP telephoto",
+        "battery": "3274 mAh",
+        "screen": "6.1 inch Super Retina XDR",
+        "processor": "A17 Pro chip"
+      },
+      "description": "iPhone 15 Pro dengan titanium design dan advanced camera system",
+      "availability": "in_stock",
+      "stock_count": 25
+    },
+    {
+      "id": "P002",
+      "name": "iPhone 15",
+      "category": "smartphone",
+      "brand": "Apple",
+      "price": 14999000,
+      "currency": "IDR",
+      "specifications": {
+        "storage": "128GB, 256GB, 512GB",
+        "camera": "48MP main, 12MP ultrawide",
+        "battery": "3349 mAh",
+        "screen": "6.1 inch Super Retina XDR",
+        "processor": "A16 Bionic chip"
+      },
+      "description": "iPhone 15 dengan Dynamic Island dan kamera 48MP",
+      "availability": "in_stock",
+      "stock_count": 30
+    },
+    {
+      "id": "P003",
+      "name": "ROG Strix G15",
+      "category": "laptop",
+      "brand": "ASUS",
+      "price": 24999000,
+      "currency": "IDR",
+      "specifications": {
+        "storage": "512GB SSD",
+        "camera": "720p HD",
+        "battery": "90Wh",
+        "screen": "15.6 inch 144Hz",
+        "processor": "AMD Ryzen 9 5900HX"
+      },
+      "description": "Laptop gaming dengan performa tinggi dan cooling system canggih",
+      "availability": "in_stock",
+      "stock_count": 15
+    },
+    {
+      "id": "P004",
+      "name": "Galaxy Watch 6",
+      "category": "smartwatch",
+      "brand": "Samsung",
+      "price": 4999000,
+      "currency": "IDR",
+      "specifications": {
+        "storage": "16GB",
+        "battery": "300mAh",
+        "screen": "1.5 inch AMOLED",
+        "processor": "Exynos W920"
+      },
+      "description": "Smartwatch dengan fitur kesehatan lengkap dan desain premium",
+      "availability": "in_stock",
+      "stock_count": 20
+    }
+  ]
+} 
