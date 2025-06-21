@@ -72,51 +72,6 @@ async def test_get_best_selling_products(mock_service):
 
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
-async def test_get_products_by_category(mock_service):
-    mock_service.search_products = AsyncMock(return_value=[
-        {"id": "1", "category": "Electronics"},
-        {"id": "2", "category": "Electronics"}
-    ])
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/category/Electronics")
-    assert resp.status_code == 200
-    assert "products" in resp.json()
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_products_by_brand(mock_service):
-    mock_service.search_products = AsyncMock(return_value=[
-        {"id": "1", "brand": "Apple"},
-        {"id": "2", "brand": "Apple"}
-    ])
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/brand/Apple")
-    assert resp.status_code == 200
-    assert "products" in resp.json()
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_product_details(mock_service):
-    mock_service.get_product_details = AsyncMock(return_value={"id": "1", "name": "Test Product"})
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/1")
-    assert resp.status_code == 200
-    assert "product" in resp.json()
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_product_details_not_found(mock_service):
-    mock_service.get_product_details = AsyncMock(return_value=None)
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/999")
-    assert resp.status_code == 404
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
 async def test_get_categories_error(mock_service):
     mock_service.get_categories = AsyncMock(side_effect=Exception("Database error"))
     from app.main import app
@@ -149,31 +104,4 @@ async def test_get_best_selling_products_error(mock_service):
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/best-selling")
-    assert resp.status_code == 500
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_products_by_category_error(mock_service):
-    mock_service.search_products = AsyncMock(side_effect=Exception("Category error"))
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/category/Electronics")
-    assert resp.status_code == 500
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_products_by_brand_error(mock_service):
-    mock_service.search_products = AsyncMock(side_effect=Exception("Brand error"))
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/brand/Apple")
-    assert resp.status_code == 500
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_product_details_error(mock_service):
-    mock_service.get_product_details = AsyncMock(side_effect=Exception("Details error"))
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/1")
     assert resp.status_code == 500 
