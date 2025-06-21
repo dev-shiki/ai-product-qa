@@ -225,13 +225,67 @@ class ExternalProductService:
             ]
     
     def get_brands(self) -> List[str]:
-        """
-        Get daftar brand produk
-        """
-        # FakeStoreAPI tidak punya brand, jadi return default
-        return [
-            "Unknown", "Online Store", "FakeStore"
-        ]
+        """Get semua brand yang tersedia"""
+        try:
+            logger.info("Getting brands from FakeStoreAPI")
+            
+            # Ambil semua produk untuk extract brands
+            url = "https://fakestoreapi.com/products"
+            response = self.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            
+            products = response.json()
+            
+            # Extract unique categories sebagai brands (karena FakeStoreAPI tidak punya brand)
+            brands = list(set([product.get('category', 'Unknown') for product in products]))
+            brands.sort()
+            
+            logger.info(f"Found {len(brands)} brands/categories")
+            return brands
+            
+        except Exception as e:
+            logger.error(f"Error getting brands: {str(e)}")
+            return ["Unknown"]
+    
+    def get_products(self, limit: int = 10) -> List[Dict]:
+        """Get semua produk (alias untuk search_products dengan keyword kosong)"""
+        return self.search_products("", limit)
+    
+    def get_top_rated_products(self, limit: int = 5) -> List[Dict]:
+        """Get produk dengan rating tertinggi"""
+        try:
+            logger.info(f"Getting top rated products, limit: {limit}")
+            
+            # Ambil semua produk dari FakeStoreAPI
+            products = self.search_products_fakestoreapi("", limit * 2)  # Ambil lebih banyak untuk sorting
+            
+            # Sort berdasarkan rating
+            sorted_products = sorted(products, key=lambda x: x.get('specifications', {}).get('rating', 0), reverse=True)
+            
+            logger.info(f"Returning {min(limit, len(sorted_products))} top rated products")
+            return sorted_products[:limit]
+            
+        except Exception as e:
+            logger.error(f"Error getting top rated products: {str(e)}")
+            return self.fallback_products[:limit]
+    
+    def get_best_selling_products(self, limit: int = 5) -> List[Dict]:
+        """Get produk dengan penjualan tertinggi"""
+        try:
+            logger.info(f"Getting best selling products, limit: {limit}")
+            
+            # Ambil semua produk dari FakeStoreAPI
+            products = self.search_products_fakestoreapi("", limit * 2)  # Ambil lebih banyak untuk sorting
+            
+            # Sort berdasarkan sold count
+            sorted_products = sorted(products, key=lambda x: x.get('specifications', {}).get('sold', 0), reverse=True)
+            
+            logger.info(f"Returning {min(limit, len(sorted_products))} best selling products")
+            return sorted_products[:limit]
+            
+        except Exception as e:
+            logger.error(f"Error getting best selling products: {str(e)}")
+            return self.fallback_products[:limit]
     
     def test_connection(self) -> bool:
         """

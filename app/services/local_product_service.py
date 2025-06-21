@@ -341,16 +341,25 @@ class LocalProductService:
             return []
     
     def get_best_selling_products(self, limit: int = 5) -> List[Dict]:
-        """
-        Get produk terlaris
-        """
+        """Get produk dengan penjualan tertinggi"""
         try:
-            sorted_products = sorted(
-                self.products, 
-                key=lambda x: x.get('specifications', {}).get('sold', 0), 
-                reverse=True
-            )
+            logger.info(f"Getting best selling products, limit: {limit}")
+            
+            # Sort berdasarkan sold count
+            sorted_products = sorted(self.products, key=lambda x: x.get('specifications', {}).get('sold', 0), reverse=True)
+            
+            logger.info(f"Returning {min(limit, len(sorted_products))} best selling products")
             return sorted_products[:limit]
+            
         except Exception as e:
             logger.error(f"Error getting best selling products: {str(e)}")
+            return []
+    
+    def get_products(self, limit: int = 10) -> List[Dict]:
+        """Get semua produk"""
+        try:
+            logger.info(f"Getting all products, limit: {limit}")
+            return self.products[:limit]
+        except Exception as e:
+            logger.error(f"Error getting products: {str(e)}")
             return [] 

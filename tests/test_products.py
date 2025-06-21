@@ -1,5 +1,5 @@
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, AsyncMock
 
 @pytest.mark.asyncio
@@ -7,7 +7,7 @@ from unittest.mock import patch, AsyncMock
 async def test_get_products(mock_service):
     mock_service.get_products = AsyncMock(return_value=[{"id": "1", "name": "Test Product"}])
     from app.main import app
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/")
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
@@ -17,7 +17,7 @@ async def test_get_products(mock_service):
 async def test_get_categories(mock_service):
     mock_service.get_categories = AsyncMock(return_value=["A", "B"])
     from app.main import app
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/categories")
     assert resp.status_code == 200
     assert "categories" in resp.json()
@@ -27,7 +27,7 @@ async def test_get_categories(mock_service):
 async def test_search_products(mock_service):
     mock_service.search_products = AsyncMock(return_value=[{"id": "1"}])
     from app.main import app
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/search?query=test")
     assert resp.status_code == 200
     assert "products" in resp.json()
@@ -37,7 +37,7 @@ async def test_search_products(mock_service):
 async def test_get_top_rated_products(mock_service):
     mock_service.get_top_rated_products = AsyncMock(return_value=[{"id": "1"}])
     from app.main import app
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/top-rated")
     assert resp.status_code == 200
     assert "products" in resp.json()
@@ -47,7 +47,7 @@ async def test_get_top_rated_products(mock_service):
 async def test_get_best_selling_products(mock_service):
     mock_service.get_best_selling_products = AsyncMock(return_value=[{"id": "1"}])
     from app.main import app
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/best-selling")
     assert resp.status_code == 200
     assert "products" in resp.json() 

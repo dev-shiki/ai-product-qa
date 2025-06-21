@@ -2,9 +2,9 @@ name: Python CI with Coverage and Codecov
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
 
 jobs:
   test:
@@ -24,11 +24,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install coverage codecov pytest httpx google-genai playwright pytest-asyncio
-
-      - name: Install playwright browsers
-        run: |
-          playwright install
+          pip install coverage codecov
 
       - name: Run tests with coverage
         run: |
@@ -41,4 +37,5 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
-          fail_ci_if_error: true 
+          fail_ci_if_error: true
+          verbose: true 
