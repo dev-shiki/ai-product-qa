@@ -45,8 +45,11 @@ async def test_search_products_fallback():
     service = ProductDataService()
     with patch.object(service, 'search_products_fakestoreapi') as mock_external:
         mock_external.side_effect = Exception("API Error")
-        result = await service.search_products("test", 5)
-        assert len(result) > 0
+        with patch.object(service, 'search_products_mock') as mock_mock:
+            mock_mock.return_value = [{"id": "1", "name": "Fallback Product"}]
+            result = await service.search_products("test", 5)
+            assert len(result) > 0
+            assert result[0]["name"] == "Fallback Product"
 
 @pytest.mark.asyncio
 async def test_get_categories():
