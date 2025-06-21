@@ -228,22 +228,19 @@ def render_main_content():
     with st.container():
         st.markdown("### 📝 Apa yang Anda cari?")
         
-        # Question input
-        question = st.text_input(
-            "Ketik pertanyaan Anda di sini...",
-            key="question_input",
-            placeholder="Contoh: Saya mencari laptop untuk kerja"
-        )
+        with st.form(key="search_form", clear_on_submit=False):
+            question = st.text_input(
+                "Ketik pertanyaan Anda di sini...",
+                key="question_input",
+                placeholder="Contoh: Saya mencari laptop untuk kerja"
+            )
+            submitted = st.form_submit_button("🔍 Cari Produk", use_container_width=True)
+            clear = st.form_submit_button("🗑️ Bersihkan", use_container_width=True)
         
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("🔍 Cari Produk", use_container_width=True, type="primary"):
-                if question.strip():
-                    process_question(question.strip())
-        
-        with col2:
-            if st.button("🗑️ Bersihkan", use_container_width=True):
-                clear_results()
+        if submitted and question.strip():
+            process_question(question.strip())
+        elif clear:
+            clear_results()
     
     # Display results
     if 'current_response' in st.session_state:
