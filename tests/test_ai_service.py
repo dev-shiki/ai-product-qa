@@ -16,6 +16,7 @@ async def test_get_response(mock_product_service, mock_client, mock_settings):
     result = await ai.get_response("Apa laptop terbaik?")
     assert "AI answer" in result
 
+@pytest.mark.skipif('google' not in globals(), reason="google.genai not available")
 @patch("app.services.ai_service.get_settings")
 @patch("app.services.ai_service.genai.Client")
 @patch("app.services.ai_service.ProductDataService")

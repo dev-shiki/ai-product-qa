@@ -1,6 +1,10 @@
 from app.services.external_product_service import ExternalProductService
 import pytest
 
+def test_external_product_service_init():
+    service = ExternalProductService()
+    assert service is not None
+
 def test_external_product_service_methods():
     service = ExternalProductService()
     # Test all public methods with dummy args
