@@ -199,10 +199,29 @@ The project maintains **80%+ test coverage** with comprehensive testing:
 
 ## 🐳 Docker Deployment
 
+### Quick Start with Docker
+
+The easiest way to run the application is using our development script:
+
+```bash
+# Make script executable (first time only)
+chmod +x docker-dev.sh
+
+# Build and start the application
+./docker-dev.sh build
+./docker-dev.sh start
+
+# View logs
+./docker-dev.sh logs
+
+# Stop the application
+./docker-dev.sh stop
+```
+
 ### Using Docker Compose
 
 ```bash
-# Build and run with Docker
+# Build and run with Docker Compose
 docker-compose up --build
 
 # Run in background
@@ -210,6 +229,25 @@ docker-compose up -d
 
 # View logs
 docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Docker Development Script
+
+We provide a convenient script `docker-dev.sh` with the following commands:
+
+```bash
+./docker-dev.sh build     # Build the Docker image
+./docker-dev.sh start     # Start the application
+./docker-dev.sh stop      # Stop the application
+./docker-dev.sh restart   # Restart the application
+./docker-dev.sh logs      # Show application logs
+./docker-dev.sh shell     # Open shell in running container
+./docker-dev.sh test      # Run tests in Docker container
+./docker-dev.sh clean     # Clean up Docker resources
+./docker-dev.sh help      # Show help message
 ```
 
 ### Manual Docker Build
@@ -219,10 +257,24 @@ docker-compose logs -f
 docker build -t product-assistant .
 
 # Run container
-docker run -p 8501:8501 -p 8000:8000 \
+docker run -d \
+  -p 8501:8501 \
+  -p 8000:8000 \
   -e GOOGLE_API_KEY=your_key_here \
+  --name product-assistant \
   product-assistant
 ```
+
+### Docker Features
+
+- ✅ **Multi-service setup** - Backend API + Frontend in one container
+- ✅ **Health checks** - Automatic monitoring and restart
+- ✅ **Environment variables** - Easy configuration management
+- ✅ **Volume mounting** - Data persistence
+- ✅ **Network isolation** - Security best practices
+- ✅ **Non-root user** - Security hardening
+- ✅ **Optimized builds** - Fast and efficient
+- ✅ **Production-ready** - Ready for deployment
 
 ## 📊 Performance & Reliability
 

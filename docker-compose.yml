@@ -3,14 +3,17 @@ version: '3.8'
 services:
   ai-product-qa:
     build: .
+    container_name: product-assistant
     ports:
       - "8000:8000"  # Backend API
       - "8501:8501"  # Frontend Streamlit
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-dummy-key-for-testing}
       - PYTHONPATH=/app
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
     volumes:
-      - .:/app
+      - ./data:/app/data:ro  # Mount data directory as read-only
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -18,15 +21,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - product-network
 
   # Optional: Add Redis for caching (future enhancement)
   # redis:
   #   image: redis:alpine
+  #   container_name: product-assistant-redis
   #   ports:
   #     - "6379:6379"
   #   volumes:
   #     - redis_data:/data
   #   restart: unless-stopped
+  #   networks:
+  #     - product-network
+
+networks:
+  product-network:
+    driver: bridge
 
 # volumes:
 #   redis_data: 
