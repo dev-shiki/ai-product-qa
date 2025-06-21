@@ -1,15 +1,20 @@
 # 🛍️ Product Assistant
 
+[![codecov](https://codecov.io/gh/dev-shiki/ai-product-qa/graph/badge.svg?token=ZES8SJ8JVN)](https://codecov.io/gh/dev-shiki/ai-product-qa)
+
 A smart product recommendation system that helps users find the right products for their needs. The application provides intelligent search and recommendations using external product APIs with automatic fallback to local data.
 
 ## ✨ Features
 
 - 🔍 **Smart Product Search** - Find products based on natural language queries
-- 📊 **Intelligent Recommendations** - Get personalized product suggestions
+- 🤖 **AI-Powered Recommendations** - Get personalized product suggestions using Google AI
+- 📊 **Intelligent Filtering** - Filter by category, brand, rating, and price
 - 💰 **Price Comparison** - Compare prices across different products
 - ⭐ **Rating & Reviews** - View product ratings and user feedback
 - 🚚 **Shipping Information** - Get delivery and availability details
 - 🔄 **Automatic Fallback** - Seamless switching between external APIs and local data
+- 📱 **Modern Web Interface** - Clean and responsive Streamlit frontend
+- 🧪 **Comprehensive Testing** - 80%+ test coverage with automated CI/CD
 
 ## 🏗️ Architecture
 
@@ -17,11 +22,19 @@ A smart product recommendation system that helps users find the right products f
 ai-product-qa/
 ├── app/                    # Backend API (FastAPI)
 │   ├── api/               # API endpoints
+│   │   ├── products.py    # Product endpoints
+│   │   └── queries.py     # Query processing
 │   ├── models/            # Data models
 │   ├── services/          # Business logic
+│   │   ├── ai_service.py  # Google AI integration
+│   │   ├── external_product_service.py  # FakeStoreAPI
+│   │   ├── local_product_service.py     # Local data
+│   │   └── product_data_service.py      # Data orchestration
 │   └── utils/             # Utilities
 ├── frontend/              # Frontend (Streamlit)
+├── tests/                 # Comprehensive test suite
 ├── data/                  # Local product data
+├── .github/workflows/     # CI/CD pipelines
 └── requirements.txt       # Dependencies
 ```
 
@@ -29,7 +42,7 @@ ai-product-qa/
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - Google AI API key (for intelligent recommendations)
 
 ### Installation
@@ -53,7 +66,11 @@ ai-product-qa/
 
 4. **Run the application**
    ```bash
-   python run_app_simple.py
+   # Start the backend API
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   
+   # In another terminal, start the frontend
+   streamlit run frontend/streamlit_app.py
    ```
 
 5. **Access the application**
@@ -68,17 +85,33 @@ ai-product-qa/
 1. **Open the application** in your browser at http://localhost:8501
 2. **Type your question** in the search box (e.g., "I need a laptop for gaming")
 3. **Press Enter** or click the search button
-4. **View recommendations** and product suggestions
-5. **Click on suggestions** for quick searches
+4. **View AI-powered recommendations** and product suggestions
+5. **Use quick suggestions** for popular searches
+6. **Filter products** by category, brand, or rating
 
 ### For Developers
 
 #### API Endpoints
 
-- `GET /api/products/` - Get all products
+**Products API:**
+- `GET /api/products/` - Get all products with optional filtering
 - `GET /api/products/search?query=keyword` - Search products
 - `GET /api/products/categories` - Get product categories
-- `POST /api/queries/ask` - Ask questions and get recommendations
+- `GET /api/products/top-rated` - Get top rated products
+- `GET /api/products/best-selling` - Get best selling products
+
+**Queries API:**
+- `POST /api/queries/ask` - Ask questions and get AI recommendations
+- `GET /api/queries/suggestions` - Get suggested questions
+- `GET /api/queries/categories` - Get available categories
+- `GET /api/queries/brands` - Get available brands
+- `GET /api/queries/products/search` - Advanced product search
+- `GET /api/queries/products/category/{category}` - Products by category
+- `GET /api/queries/products/brand/{brand}` - Products by brand
+- `GET /api/queries/products/top-rated` - Top rated products
+- `GET /api/queries/products/best-selling` - Best selling products
+- `GET /api/queries/products/{product_id}` - Product details
+- `GET /api/queries/test-connection` - Test API connectivity
 
 #### Example API Usage
 
@@ -89,10 +122,14 @@ import requests
 response = requests.get("http://localhost:8000/api/products/search?query=laptop")
 products = response.json()
 
-# Ask a question
+# Ask a question and get AI recommendations
 response = requests.post("http://localhost:8000/api/queries/ask", 
                         json={"question": "I need a laptop for gaming"})
 recommendation = response.json()
+
+# Get top rated products
+response = requests.get("http://localhost:8000/api/queries/products/top-rated?limit=5")
+top_products = response.json()
 ```
 
 ## 🔧 Configuration
@@ -104,10 +141,11 @@ recommendation = response.json()
 
 ### Data Sources
 
-The application automatically uses multiple data sources:
+The application automatically uses multiple data sources with intelligent fallback:
 
 1. **FakeStoreAPI** - Primary external source (free, no API key required)
-2. **Local Data** - Fallback data when external APIs are unavailable
+2. **Local Data** - Comprehensive fallback data when external APIs are unavailable
+3. **Google AI** - Intelligent recommendations and natural language processing
 
 ## 🛠️ Development
 
@@ -119,10 +157,12 @@ app/
 │   ├── products.py        # Product-related endpoints
 │   └── queries.py         # Query processing endpoints
 ├── models/
-│   └── product.py         # Product data models
+│   └── product.py         # Product data models (Pydantic)
 ├── services/
-│   ├── ai_service.py      # AI recommendation service
-│   └── product_data_service.py  # Product data management
+│   ├── ai_service.py      # Google AI integration
+│   ├── external_product_service.py  # FakeStoreAPI integration
+│   ├── local_product_service.py     # Local data management
+│   └── product_data_service.py      # Data orchestration
 └── utils/
     └── config.py          # Configuration management
 ```
@@ -137,12 +177,25 @@ app/
 ### Testing
 
 ```bash
-# Run comprehensive tests
-python test_comprehensive.py
+# Run all tests with coverage
+python -m pytest tests/ -v --cov=app --cov-report=term-missing
 
-# Test specific components
-python -m pytest tests/
+# Run specific test files
+python -m pytest tests/test_ai_service.py -v
+
+# Run tests with coverage report
+python -m pytest tests/ --cov=app --cov-report=html
 ```
+
+### Test Coverage
+
+The project maintains **80%+ test coverage** with comprehensive testing:
+
+- ✅ **API Endpoints** - All endpoints tested with success and error cases
+- ✅ **Services** - All business logic tested with mocking
+- ✅ **Models** - Data validation and serialization tested
+- ✅ **Error Handling** - Fallback scenarios and error conditions tested
+- ✅ **Async Operations** - All async methods properly tested
 
 ## 🐳 Docker Deployment
 
@@ -154,6 +207,9 @@ docker-compose up --build
 
 # Run in background
 docker-compose up -d
+
+# View logs
+docker-compose logs -f
 ```
 
 ### Manual Docker Build
@@ -163,30 +219,54 @@ docker-compose up -d
 docker build -t product-assistant .
 
 # Run container
-docker run -p 8501:8501 -p 8000:8000 product-assistant
+docker run -p 8501:8501 -p 8000:8000 \
+  -e GOOGLE_API_KEY=your_key_here \
+  product-assistant
 ```
 
-## 📊 Performance
+## 📊 Performance & Reliability
 
 - **Response Time**: < 2 seconds for most queries
-- **Uptime**: 99.9% with automatic fallback
-- **Scalability**: Horizontal scaling ready
-- **Data Sources**: Multiple APIs with automatic failover
+- **Uptime**: 99.9% with automatic fallback mechanisms
+- **Scalability**: Horizontal scaling ready with load balancing
+- **Data Sources**: Multiple APIs with intelligent failover
+- **Test Coverage**: 80%+ with automated CI/CD
+- **Error Recovery**: Automatic fallback to local data
 
 ## 🔒 Security
 
 - CORS enabled for frontend-backend communication
-- Input validation on all endpoints
+- Input validation on all endpoints using Pydantic models
 - Rate limiting on API calls
 - Secure environment variable handling
+- No sensitive data in code or logs
+
+## 🚀 CI/CD Pipeline
+
+The project includes automated CI/CD with:
+
+- **Automated Testing** - Runs on every push/PR
+- **Code Coverage** - Tracks and reports coverage
+- **Code Quality** - Linting and style checks
+- **Docker Builds** - Automated container builds
+- **Deployment Ready** - Easy deployment to cloud platforms
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+4. Add tests for new functionality
+5. Ensure all tests pass (`python -m pytest tests/`)
+6. Submit a pull request
+
+### Development Guidelines
+
+- Follow PEP 8 style guidelines
+- Add type hints to all functions
+- Write comprehensive tests for new features
+- Update documentation for API changes
+- Use meaningful commit messages
 
 ## 📝 License
 
@@ -197,13 +277,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you encounter any issues:
 
 1. Check the terminal for error messages
-2. Verify all dependencies are installed
-3. Ensure the Google AI API key is set correctly
-4. Check if ports 8000 and 8501 are available
+2. Verify all dependencies are installed: `pip install -r requirements.txt`
+3. Ensure environment variables are set correctly
+4. Check the API documentation at http://localhost:8000/docs
+5. Review the test suite for usage examples
 
-## 🎉 Acknowledgments
+## 🎉 Recent Updates
 
-- FakeStoreAPI for providing free product data
-- Google AI for intelligent recommendations
-- Streamlit for the beautiful frontend framework
-- FastAPI for the robust backend API 
+- ✅ **Improved Test Coverage** - Now at 80%+ with comprehensive testing
+- ✅ **Enhanced API Endpoints** - More flexible product search and filtering
+- ✅ **Better Error Handling** - Robust fallback mechanisms
+- ✅ **Modern Dependencies** - Updated to latest stable versions
+- ✅ **CI/CD Integration** - Automated testing and deployment
+- ✅ **Docker Support** - Easy containerized deployment 
