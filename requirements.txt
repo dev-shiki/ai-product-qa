@@ -4,7 +4,7 @@ python-dotenv==1.0.0
 streamlit==1.28.2
 requests==2.31.0
 # google-ai==0.1.0
-google-generativeai==0.3.2
+google-genai==0.3.2
 pydantic==2.5.2
 pydantic-settings==2.1.0
 python-multipart==0.0.6
