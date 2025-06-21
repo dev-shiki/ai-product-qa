@@ -5,12 +5,9 @@ from unittest.mock import patch, AsyncMock
 @pytest.mark.asyncio
 @patch("app.api.queries.product_service")
 @patch("app.api.queries.ai_service")
-@patch("app.main.get_settings")
-async def test_ask_question(mock_settings, mock_ai, mock_product):
-    mock_settings.return_value.GOOGLE_API_KEY = "dummy-key"
+async def test_ask_question(mock_ai, mock_product):
     mock_ai.get_response = AsyncMock(return_value="Jawaban AI")
     mock_product.search_products = AsyncMock(return_value=[{"id": "1"}])
-    # Import after mocking
     from app.main import app
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.post("/api/queries/ask", json={"question": "Apa laptop terbaik?"})
@@ -19,10 +16,7 @@ async def test_ask_question(mock_settings, mock_ai, mock_product):
     assert resp.json()["products"]
 
 @pytest.mark.asyncio
-@patch("app.main.get_settings")
-async def test_get_suggestions(mock_settings):
-    mock_settings.return_value.GOOGLE_API_KEY = "dummy-key"
-    # Import after mocking
+async def test_get_suggestions():
     from app.main import app
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.get("/api/queries/suggestions")
@@ -31,11 +25,8 @@ async def test_get_suggestions(mock_settings):
 
 @pytest.mark.asyncio
 @patch("app.api.queries.product_service")
-@patch("app.main.get_settings")
-async def test_get_categories(mock_settings, mock_service):
-    mock_settings.return_value.GOOGLE_API_KEY = "dummy-key"
+async def test_get_categories(mock_service):
     mock_service.get_categories.return_value = ["A", "B"]
-    # Import after mocking
     from app.main import app
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.get("/api/queries/categories")
@@ -44,11 +35,8 @@ async def test_get_categories(mock_settings, mock_service):
 
 @pytest.mark.asyncio
 @patch("app.api.queries.product_service")
-@patch("app.main.get_settings")
-async def test_get_brands(mock_settings, mock_service):
-    mock_settings.return_value.GOOGLE_API_KEY = "dummy-key"
+async def test_get_brands(mock_service):
     mock_service.get_brands.return_value = ["BrandA"]
-    # Import after mocking
     from app.main import app
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.get("/api/queries/brands")
