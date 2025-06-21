@@ -1,5 +1,5 @@
 import pytest
-from httpx import AsyncClient
+from fastapi.testclient import AsyncClient
 
 @pytest.mark.asyncio
 async def test_root():
