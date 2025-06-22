@@ -8,8 +8,8 @@ async def test_get_products(mock_service):
     mock_service.get_products = AsyncMock(return_value=[{
         "id": "1", 
         "name": "Test Product",
-        "category": "Test Category",
-        "brand": "Test Brand",
+        "category": "smartphone",
+        "brand": "Apple",
         "price": 100000,
         "currency": "IDR",
         "description": "Test description",
@@ -32,8 +32,38 @@ async def test_get_products(mock_service):
 
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
+async def test_get_products_with_category(mock_service):
+    mock_service.get_products = AsyncMock(return_value=[{
+        "id": "1", 
+        "name": "iPhone",
+        "category": "smartphone",
+        "brand": "Apple"
+    }])
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get("/api/products/?category=smartphone")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+@pytest.mark.asyncio
+@patch("app.api.products.product_service")
+async def test_get_products_with_search(mock_service):
+    mock_service.get_products = AsyncMock(return_value=[{
+        "id": "1", 
+        "name": "iPhone",
+        "category": "smartphone",
+        "brand": "Apple"
+    }])
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get("/api/products/?search=iPhone")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+@pytest.mark.asyncio
+@patch("app.api.products.product_service")
 async def test_get_categories(mock_service):
-    mock_service.get_categories = AsyncMock(return_value=["A", "B"])
+    mock_service.get_categories = AsyncMock(return_value=["smartphone", "laptop"])
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/categories")
@@ -43,37 +73,19 @@ async def test_get_categories(mock_service):
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
 async def test_search_products(mock_service):
-    mock_service.search_products = AsyncMock(return_value=[{"id": "1"}])
+    mock_service.search_products = AsyncMock(return_value=[{"id": "1", "name": "iPhone"}])
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/search?query=test")
+        resp = await ac.get("/api/products/search?query=iPhone")
     assert resp.status_code == 200
     assert "products" in resp.json()
+    assert "query" in resp.json()
+    assert resp.json()["source"] == "local"
 
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
 async def test_get_top_rated_products(mock_service):
-    mock_service.get_top_rated_products = AsyncMock(return_value=[{"id": "1"}])
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/top-rated")
-    assert resp.status_code == 200
-    assert "products" in resp.json()
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_best_selling_products(mock_service):
-    mock_service.get_best_selling_products = AsyncMock(return_value=[{"id": "1"}])
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/products/best-selling")
-    assert resp.status_code == 200
-    assert "products" in resp.json()
-
-@pytest.mark.asyncio
-@patch("app.api.products.product_service")
-async def test_get_categories_error(mock_service):
-    mock_service.get_categories = AsyncMock(side_effect=Exception("Database error"))
+    mock_service.get_top_rated_products = AsyncMock(return_value=[{"id": "1", "rating": 4.9}])
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/categories")

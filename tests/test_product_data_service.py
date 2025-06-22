@@ -1,121 +1,169 @@
 import pytest
+from unittest.mock import patch, MagicMock
 from app.services.product_data_service import ProductDataService
-from unittest.mock import patch, AsyncMock, MagicMock
+from app.services.local_product_service import LocalProductService
 
 @pytest.fixture
 def product_service():
     return ProductDataService()
 
-@pytest.mark.asyncio
-async def test_search_products(product_service):
-    result = await product_service.search_products("iPhone", limit=1)
-    assert isinstance(result, list)
+@pytest.fixture
+def mock_local_service():
+    with patch('app.services.product_data_service.LocalProductService') as mock:
+        service_instance = MagicMock()
+        mock.return_value = service_instance
+        yield service_instance
 
-@pytest.mark.asyncio
-async def test_get_products(product_service):
-    result = await product_service.get_products(limit=1)
-    assert isinstance(result, list)
-
-@pytest.mark.asyncio
-async def test_get_categories(product_service):
-    result = await product_service.get_categories()
-    assert isinstance(result, list)
-
-@pytest.mark.asyncio
-async def test_get_top_rated_products(product_service):
-    result = await product_service.get_top_rated_products(limit=1)
-    assert isinstance(result, list)
-
-@pytest.mark.asyncio
-async def test_get_best_selling_products(product_service):
-    result = await product_service.get_best_selling_products(limit=1)
-    assert isinstance(result, list)
-
-@pytest.mark.asyncio
-async def test_search_products():
-    service = ProductDataService()
-    with patch.object(service, 'search_products_fakestoreapi') as mock_external:
-        mock_external.return_value = [{"id": "1", "name": "External Product"}]
-        result = await service.search_products("test", 5)
-        assert len(result) > 0
-        assert result[0]["name"] == "External Product"
-
-@pytest.mark.asyncio
-async def test_search_products_fallback():
-    service = ProductDataService()
-    with patch.object(service, 'search_products_fakestoreapi') as mock_external:
-        mock_external.side_effect = Exception("API Error")
-        with patch.object(service, 'search_products_mock') as mock_mock:
-            mock_mock.return_value = [{"id": "1", "name": "Fallback Product"}]
-            result = await service.search_products("test", 5)
-            assert len(result) > 0
-            assert result[0]["name"] == "Fallback Product"
-
-@pytest.mark.asyncio
-async def test_get_categories():
-    service = ProductDataService()
-    result = await service.get_categories()
-    assert len(result) > 0
-    assert "Smartphone" in result
-
-def test_get_brands():
-    service = ProductDataService()
-    # ProductDataService doesn't have get_brands method, so we'll test what it has
-    result = service.get_all_products(5)
-    assert len(result) > 0
-
-@pytest.mark.asyncio
-async def test_get_product_details():
-    service = ProductDataService()
-    # ProductDataService doesn't have get_product_details method
-    # Let's test search_products_mock instead
-    result = service.search_products_mock("iPhone", 5)
-    assert len(result) > 0
-
-def test_get_products():
-    service = ProductDataService()
-    result = service.get_all_products(5)
-    assert len(result) > 0
-
-@pytest.mark.asyncio
-async def test_get_top_rated_products():
-    service = ProductDataService()
-    with patch.object(service, 'search_products_fakestoreapi') as mock_external:
-        mock_external.return_value = [{"id": "1", "name": "Top Rated", "specifications": {"rating": 5.0}}]
-        result = await service.get_top_rated_products(5)
-        assert len(result) > 0
-
-@pytest.mark.asyncio
-async def test_get_best_selling_products():
-    service = ProductDataService()
-    with patch.object(service, 'search_products_fakestoreapi') as mock_external:
-        mock_external.return_value = [{"id": "1", "name": "Best Selling", "specifications": {"sold": 1000}}]
-        result = await service.get_best_selling_products(5)
-        assert len(result) > 0
-
-def test_search_products_fakestoreapi():
-    service = ProductDataService()
-    with patch.object(service.session, 'get') as mock_get:
-        # Create a proper mock response object
-        mock_response = MagicMock()
-        mock_response.json.return_value = [{"id": 1, "title": "Test", "category": "test", "price": 10.0, "description": "test", "rating": {"rate": 4.5}, "image": "test.jpg"}]
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+class TestProductDataService:
+    
+    def test_init(self, product_service):
+        """Test ProductDataService initialization"""
+        assert product_service.local_service is not None
+        assert isinstance(product_service.local_service, LocalProductService)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_success(self, product_service, mock_local_service):
+        """Test successful product search"""
+        mock_products = [
+            {"id": "1", "name": "Test Product", "price": 1000000}
+        ]
+        mock_local_service.search_products.return_value = mock_products
         
-        result = service.search_products_fakestoreapi("test", 5)
-        assert len(result) > 0
-
-def test_search_products_mock():
-    service = ProductDataService()
-    result = service.search_products_mock("iPhone", 5)
-    assert len(result) > 0
-
-def test_get_products_by_category():
-    service = ProductDataService()
-    result = service.get_products_by_category("Smartphone", 5)
-    assert len(result) > 0
-
-def test_get_all_products():
-    service = ProductDataService()
-    result = service.get_all_products(5)
-    assert len(result) > 0 
+        result = await product_service.search_products("test", 5)
+        
+        assert result == mock_products
+        mock_local_service.search_products.assert_called_once_with("test", 5)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_error(self, product_service, mock_local_service):
+        """Test product search with error"""
+        mock_local_service.search_products.side_effect = Exception("Test error")
+        
+        result = await product_service.search_products("test", 5)
+        
+        assert result == []
+    
+    @pytest.mark.asyncio
+    async def test_get_products_with_search(self, product_service, mock_local_service):
+        """Test get_products with search parameter"""
+        mock_products = [{"id": "1", "name": "Test"}]
+        mock_local_service.search_products.return_value = mock_products
+        
+        result = await product_service.get_products(search="test", limit=5)
+        
+        assert result == mock_products
+        mock_local_service.search_products.assert_called_once_with("test", 5)
+    
+    @pytest.mark.asyncio
+    async def test_get_products_with_category(self, product_service, mock_local_service):
+        """Test get_products with category parameter"""
+        mock_products = [{"id": "1", "name": "Test", "category": "smartphone"}]
+        mock_local_service.get_products_by_category.return_value = mock_products
+        
+        result = await product_service.get_products(category="smartphone", limit=5)
+        
+        assert result == mock_products
+        mock_local_service.get_products_by_category.assert_called_once_with("smartphone", 5)
+    
+    @pytest.mark.asyncio
+    async def test_get_products_default(self, product_service, mock_local_service):
+        """Test get_products without parameters"""
+        mock_products = [{"id": "1", "name": "Test"}]
+        mock_local_service.get_products.return_value = mock_products
+        
+        result = await product_service.get_products(limit=10)
+        
+        assert result == mock_products
+        mock_local_service.get_products.assert_called_once_with(10)
+    
+    @pytest.mark.asyncio
+    async def test_get_categories_success(self, product_service, mock_local_service):
+        """Test getting categories successfully"""
+        mock_categories = ["smartphone", "laptop", "tablet"]
+        mock_local_service.get_categories.return_value = mock_categories
+        
+        result = await product_service.get_categories()
+        
+        assert result == mock_categories
+        mock_local_service.get_categories.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_get_categories_error(self, product_service, mock_local_service):
+        """Test getting categories with error"""
+        mock_local_service.get_categories.side_effect = Exception("Test error")
+        
+        result = await product_service.get_categories()
+        
+        assert result == []
+    
+    @pytest.mark.asyncio
+    async def test_get_top_rated_products(self, product_service, mock_local_service):
+        """Test getting top rated products"""
+        mock_products = [{"id": "1", "name": "Top Product", "rating": 4.9}]
+        mock_local_service.get_top_rated_products.return_value = mock_products
+        
+        result = await product_service.get_top_rated_products(5)
+        
+        assert result == mock_products
+        mock_local_service.get_top_rated_products.assert_called_once_with(5)
+    
+    @pytest.mark.asyncio
+    async def test_get_best_selling_products(self, product_service, mock_local_service):
+        """Test getting best selling products"""
+        mock_products = [{"id": "1", "name": "Best Seller", "sold": 1000}]
+        mock_local_service.get_best_selling_products.return_value = mock_products
+        
+        result = await product_service.get_best_selling_products(5)
+        
+        assert result == mock_products
+        mock_local_service.get_best_selling_products.assert_called_once_with(5)
+    
+    def test_get_products_by_category(self, product_service, mock_local_service):
+        """Test getting products by category"""
+        mock_products = [{"id": "1", "name": "Smartphone", "category": "smartphone"}]
+        mock_local_service.get_products_by_category.return_value = mock_products
+        
+        result = product_service.get_products_by_category("smartphone", 5)
+        
+        assert result == mock_products
+        mock_local_service.get_products_by_category.assert_called_once_with("smartphone", 5)
+    
+    def test_get_all_products(self, product_service, mock_local_service):
+        """Test getting all products"""
+        mock_products = [{"id": "1", "name": "Product 1"}, {"id": "2", "name": "Product 2"}]
+        mock_local_service.get_products.return_value = mock_products
+        
+        result = product_service.get_all_products(10)
+        
+        assert result == mock_products
+        mock_local_service.get_products.assert_called_once_with(10)
+    
+    def test_get_product_details(self, product_service, mock_local_service):
+        """Test getting product details"""
+        mock_product = {"id": "1", "name": "Test Product", "price": 1000000}
+        mock_local_service.get_product_details.return_value = mock_product
+        
+        result = product_service.get_product_details("1")
+        
+        assert result == mock_product
+        mock_local_service.get_product_details.assert_called_once_with("1")
+    
+    def test_get_brands(self, product_service, mock_local_service):
+        """Test getting brands"""
+        mock_brands = ["Apple", "Samsung", "Sony"]
+        mock_local_service.get_brands.return_value = mock_brands
+        
+        result = product_service.get_brands()
+        
+        assert result == mock_brands
+        mock_local_service.get_brands.assert_called_once()
+    
+    def test_get_products_by_brand(self, product_service, mock_local_service):
+        """Test getting products by brand"""
+        mock_products = [{"id": "1", "name": "iPhone", "brand": "Apple"}]
+        mock_local_service.get_products_by_brand.return_value = mock_products
+        
+        result = product_service.get_products_by_brand("Apple", 5)
+        
+        assert result == mock_products
+        mock_local_service.get_products_by_brand.assert_called_once_with("Apple", 5) 

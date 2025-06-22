@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/dev-shiki/ai-product-qa/graph/badge.svg?token=ZES8SJ8JVN)](https://codecov.io/gh/dev-shiki/ai-product-qa)
 
-A smart product recommendation system that helps users find the right products for their needs. The application provides intelligent search and recommendations using external product APIs with automatic fallback to local data.
+A smart product recommendation system that helps users find the right products for their needs. The application provides intelligent search and recommendations using local product data with AI-powered insights.
 
 ## ✨ Features
 
@@ -11,10 +11,10 @@ A smart product recommendation system that helps users find the right products f
 - 📊 **Intelligent Filtering** - Filter by category, brand, rating, and price
 - 💰 **Price Comparison** - Compare prices across different products
 - ⭐ **Rating & Reviews** - View product ratings and user feedback
-- 🚚 **Shipping Information** - Get delivery and availability details
-- 🔄 **Automatic Fallback** - Seamless switching between external APIs and local data
+- 🚚 **Availability Information** - Get stock and availability details
 - 📱 **Modern Web Interface** - Clean and responsive Streamlit frontend
 - 🧪 **Comprehensive Testing** - 80%+ test coverage with automated CI/CD
+- 📦 **Local Data Source** - Reliable local product database with 50+ products
 
 ## 🏗️ Architecture
 
@@ -27,13 +27,12 @@ ai-product-qa/
 │   ├── models/            # Data models
 │   ├── services/          # Business logic
 │   │   ├── ai_service.py  # Google AI integration
-│   │   ├── external_product_service.py  # FakeStoreAPI
-│   │   ├── local_product_service.py     # Local data
+│   │   ├── local_product_service.py     # Local data management
 │   │   └── product_data_service.py      # Data orchestration
 │   └── utils/             # Utilities
 ├── frontend/              # Frontend (Streamlit)
 ├── tests/                 # Comprehensive test suite
-├── data/                  # Local product data
+├── data/                  # Local product data (50+ products)
 ├── .github/workflows/     # CI/CD pipelines
 └── requirements.txt       # Dependencies
 ```
@@ -99,6 +98,10 @@ ai-product-qa/
 - `GET /api/products/categories` - Get product categories
 - `GET /api/products/top-rated` - Get top rated products
 - `GET /api/products/best-selling` - Get best selling products
+- `GET /api/products/brands` - Get available brands
+- `GET /api/products/category/{category}` - Products by category
+- `GET /api/products/brand/{brand}` - Products by brand
+- `GET /api/products/{product_id}` - Product details
 
 **Queries API:**
 - `POST /api/queries/ask` - Ask questions and get AI recommendations
@@ -111,7 +114,7 @@ ai-product-qa/
 - `GET /api/queries/products/top-rated` - Top rated products
 - `GET /api/queries/products/best-selling` - Best selling products
 - `GET /api/queries/products/{product_id}` - Product details
-- `GET /api/queries/test-connection` - Test API connectivity
+- `GET /api/queries/test-connection` - Test local data connectivity
 
 #### Example API Usage
 
@@ -139,13 +142,14 @@ top_products = response.json()
 - `GOOGLE_API_KEY` - Google AI API key for intelligent responses
 - `API_BASE_URL` - Backend API URL (default: http://localhost:8000)
 
-### Data Sources
+### Data Source
 
-The application automatically uses multiple data sources with intelligent fallback:
+The application uses a comprehensive local product database:
 
-1. **FakeStoreAPI** - Primary external source (free, no API key required)
-2. **Local Data** - Comprehensive fallback data when external APIs are unavailable
-3. **Google AI** - Intelligent recommendations and natural language processing
+- **Local Product Data** - 50+ products across multiple categories
+- **Categories**: Smartphone, Laptop, Tablet, Smartwatch, Headphone, Camera, Gaming, TV, Home Appliances, and more
+- **Brands**: Apple, Samsung, Sony, ASUS, Dell, Canon, DJI, Nintendo, and others
+- **Google AI** - Intelligent recommendations and natural language processing
 
 ## 🛠️ Development
 
@@ -160,7 +164,6 @@ app/
 │   └── product.py         # Product data models (Pydantic)
 ├── services/
 │   ├── ai_service.py      # Google AI integration
-│   ├── external_product_service.py  # FakeStoreAPI integration
 │   ├── local_product_service.py     # Local data management
 │   └── product_data_service.py      # Data orchestration
 └── utils/
@@ -173,6 +176,7 @@ app/
 2. **New Services**: Add to `app/services/` directory
 3. **New Models**: Add to `app/models/` directory
 4. **Frontend Changes**: Modify `frontend/streamlit_app.py`
+5. **Product Data**: Update `data/products.json` for new products
 
 ### Testing
 
@@ -197,7 +201,7 @@ The project maintains **80%+ test coverage** with comprehensive testing:
 - ✅ **Error Handling** - Fallback scenarios and error conditions tested
 - ✅ **Async Operations** - All async methods properly tested
 
-## 🐳 Docker Deployment
+## �� Docker Deployment
 
 ### Quick Start with Docker
 

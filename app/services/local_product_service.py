@@ -13,10 +13,78 @@ class LocalProductService:
     
     def __init__(self):
         self.products = self._load_local_products()
-        logger.info(f"Loaded {len(self.products)} local products")
+        logger.info(f"Loaded {len(self.products)} local products from JSON file")
     
     def _load_local_products(self) -> List[Dict]:
-        """Load produk dari data lokal"""
+        """Load produk dari file JSON lokal"""
+        try:
+            # Get the path to the data/products.json file
+            current_dir = Path(__file__).parent.parent.parent
+            json_file_path = current_dir / "data" / "products.json"
+            
+            if not json_file_path.exists():
+                logger.error(f"Products JSON file not found at: {json_file_path}")
+                return self._get_fallback_products()
+            
+            # Try different encodings
+            encodings = ['utf-16-le', 'utf-16', 'utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
+            
+            for encoding in encodings:
+                try:
+                    with open(json_file_path, 'r', encoding=encoding) as file:
+                        content = file.read()
+                        # Remove BOM if present
+                        if content.startswith('\ufeff'):
+                            content = content[1:]
+                        
+                        data = json.loads(content)
+                        products = data.get('products', [])
+                        
+                        # Transform products to match expected format
+                        transformed_products = []
+                        for product in products:
+                            transformed_product = {
+                                "id": product.get('id', ''),
+                                "name": product.get('name', ''),
+                                "category": product.get('category', ''),
+                                "brand": product.get('brand', ''),
+                                "price": product.get('price', 0),
+                                "currency": product.get('currency', 'IDR'),
+                                "description": product.get('description', ''),
+                                "specifications": {
+                                    "rating": product.get('rating', 0),
+                                    "sold": random.randint(100, 2000),  # Add random sold count
+                                    "stock": product.get('stock_count', 0),
+                                    "condition": "Baru",
+                                    "shop_location": "Indonesia",
+                                    "shop_name": f"{product.get('brand', 'Unknown')} Store",
+                                    **product.get('specifications', {})
+                                },
+                                "availability": product.get('availability', 'in_stock'),
+                                "reviews_count": product.get('reviews_count', 0),
+                                "images": [f"https://example.com/{product.get('id', 'product')}.jpg"],
+                                "url": f"https://shopee.co.id/{product.get('id', 'product')}"
+                            }
+                            transformed_products.append(transformed_product)
+                        
+                        logger.info(f"Successfully loaded {len(transformed_products)} products from JSON file using {encoding} encoding")
+                        return transformed_products
+                        
+                except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                    logger.warning(f"Failed to load with {encoding} encoding: {str(e)}")
+                    continue
+            
+            # If all encodings fail, use fallback
+            logger.error("All encoding attempts failed, using fallback products")
+            return self._get_fallback_products()
+                
+        except Exception as e:
+            logger.error(f"Error loading products from JSON file: {str(e)}")
+            return self._get_fallback_products()
+    
+    def _get_fallback_products(self) -> List[Dict]:
+        """Fallback products if JSON file cannot be loaded"""
+        logger.warning("Using fallback products due to JSON file loading error")
         return [
             {
                 "id": "1",
