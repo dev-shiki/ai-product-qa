@@ -28,22 +28,42 @@ async def ask_question(request: QueryRequest):
     try:
         # Get AI response
         ai_response = await ai_service.get_response(request.question)
+        
         # Get relevant products and fallback message
         # Ekstrak kategori dan max_price dari pertanyaan (sederhana)
         category = None
         max_price = None
-        for cat in ['laptop', 'smartphone', 'tablet', 'headphone', 'kamera', 'camera', 'audio', 'tv', 'drone', 'jam', 'watch']:
-            if cat in request.question.lower():
+        
+        # Deteksi kategori dengan lebih lengkap
+        question_lower = request.question.lower()
+        category_mapping = {
+            'laptop': ['laptop', 'notebook', 'komputer'],
+            'smartphone': ['smartphone', 'hp', 'handphone', 'phone', 'telepon', 'ponsel'],
+            'tablet': ['tablet', 'ipad'],
+            'headphone': ['headphone', 'earphone', 'headset', 'audio'],
+            'kamera': ['kamera', 'camera', 'fotografi'],
+            'audio': ['audio', 'speaker', 'sound'],
+            'tv': ['tv', 'televisi'],
+            'drone': ['drone', 'quadcopter'],
+            'jam': ['jam', 'watch', 'smartwatch']
+        }
+        
+        for cat, keywords in category_mapping.items():
+            if any(keyword in question_lower for keyword in keywords):
                 category = cat
                 break
-        price_match = re.search(r'(\d+)\s*juta', request.question.lower())
+        
+        # Deteksi budget
+        price_match = re.search(r'(\d+)\s*juta', question_lower)
         if price_match:
             max_price = int(price_match.group(1)) * 1000000
-        elif 'budget' in request.question.lower() or 'murah' in request.question.lower():
+        elif 'budget' in question_lower or 'murah' in question_lower:
             max_price = 5000000
+            
         products, fallback_message = await product_service.smart_search_products(
             keyword=request.question, category=category, max_price=max_price, limit=5
         )
+        
         return QueryResponse(
             answer=ai_response,
             products=products,

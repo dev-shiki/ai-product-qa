@@ -7,7 +7,10 @@ from unittest.mock import patch, AsyncMock
 @patch("app.api.queries.ai_service")
 async def test_ask_question(mock_ai, mock_product):
     mock_ai.get_response = AsyncMock(return_value="Jawaban AI")
-    mock_product.search_products = AsyncMock(return_value=[{"id": "P001", "name": "iPhone 15 Pro Max"}])
+    mock_product.smart_search_products = AsyncMock(return_value=(
+        [{"id": "P001", "name": "iPhone 15 Pro Max"}], 
+        "Berikut produk yang sesuai dengan kriteria Anda."
+    ))
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post("/api/queries/ask", json={"question": "Apa laptop terbaik?"})
@@ -16,6 +19,8 @@ async def test_ask_question(mock_ai, mock_product):
     assert data["answer"] == "Jawaban AI"
     assert isinstance(data["products"], list)
     assert len(data["products"]) > 0
+    assert "note" in data
+    assert data["note"] == "Berikut produk yang sesuai dengan kriteria Anda."
 
 @pytest.mark.asyncio
 async def test_get_suggestions():

@@ -28,16 +28,31 @@ class AIService:
             import re
             category = None
             max_price = None
-            # Coba deteksi kategori dari kata kunci umum
-            for cat in ['laptop', 'smartphone', 'tablet', 'headphone', 'kamera', 'camera', 'audio', 'tv', 'drone', 'jam', 'watch']:
-                if cat in question.lower():
+            
+            # Deteksi kategori dengan lebih lengkap (sama dengan API endpoint)
+            question_lower = question.lower()
+            category_mapping = {
+                'laptop': ['laptop', 'notebook', 'komputer'],
+                'smartphone': ['smartphone', 'hp', 'handphone', 'phone', 'telepon', 'ponsel'],
+                'tablet': ['tablet', 'ipad'],
+                'headphone': ['headphone', 'earphone', 'headset', 'audio'],
+                'kamera': ['kamera', 'camera', 'fotografi'],
+                'audio': ['audio', 'speaker', 'sound'],
+                'tv': ['tv', 'televisi'],
+                'drone': ['drone', 'quadcopter'],
+                'jam': ['jam', 'watch', 'smartwatch']
+            }
+            
+            for cat, keywords in category_mapping.items():
+                if any(keyword in question_lower for keyword in keywords):
                     category = cat
                     break
+            
             # Deteksi budget
-            price_match = re.search(r'(\d+)\s*juta', question.lower())
+            price_match = re.search(r'(\d+)\s*juta', question_lower)
             if price_match:
                 max_price = int(price_match.group(1)) * 1000000
-            elif 'budget' in question.lower() or 'murah' in question.lower():
+            elif 'budget' in question_lower or 'murah' in question_lower:
                 max_price = 5000000
 
             # Gunakan smart_search_products
