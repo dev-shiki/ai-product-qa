@@ -40,7 +40,20 @@ async def test_get_products_with_category(mock_service):
         "id": "P001",
         "name": "iPhone 15 Pro Max",
         "category": "smartphone",
-        "brand": "Apple"
+        "brand": "Apple",
+        "price": 21999000,
+        "currency": "IDR",
+        "description": "iPhone 15 Pro Max dengan titanium design, kamera 48MP, dan performa terbaik",
+        "specifications": {
+            "rating": 4.8,
+            "sold": 100,
+            "stock": 25,
+            "condition": "Baru",
+            "shop_location": "Indonesia",
+            "shop_name": "Apple Store"
+        },
+        "images": ["https://example.com/P001.jpg"],
+        "url": "https://shopee.co.id/P001"
     }])
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -58,7 +71,20 @@ async def test_get_products_with_search(mock_service):
         "id": "P001",
         "name": "iPhone 15 Pro Max",
         "category": "smartphone",
-        "brand": "Apple"
+        "brand": "Apple",
+        "price": 21999000,
+        "currency": "IDR",
+        "description": "iPhone 15 Pro Max dengan titanium design, kamera 48MP, dan performa terbaik",
+        "specifications": {
+            "rating": 4.8,
+            "sold": 100,
+            "stock": 25,
+            "condition": "Baru",
+            "shop_location": "Indonesia",
+            "shop_name": "Apple Store"
+        },
+        "images": ["https://example.com/P001.jpg"],
+        "url": "https://shopee.co.id/P001"
     }])
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

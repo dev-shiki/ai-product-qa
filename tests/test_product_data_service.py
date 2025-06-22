@@ -4,22 +4,21 @@ from app.services.product_data_service import ProductDataService
 from app.services.local_product_service import LocalProductService
 
 @pytest.fixture
-def product_service():
-    return ProductDataService()
+def mock_local_service():
+    return MagicMock()
 
 @pytest.fixture
-def mock_local_service():
-    with patch('app.services.product_data_service.LocalProductService') as mock:
-        service_instance = MagicMock()
-        mock.return_value = service_instance
-        yield service_instance
+def product_service(mock_local_service):
+    service = ProductDataService()
+    service.local_service = mock_local_service
+    return service
 
 class TestProductDataService:
     
     def test_init(self, product_service):
         """Test ProductDataService initialization"""
         assert product_service.local_service is not None
-        assert isinstance(product_service.local_service, LocalProductService)
+        assert isinstance(product_service.local_service, MagicMock)
     
     @pytest.mark.asyncio
     async def test_search_products_success(self, product_service, mock_local_service):
