@@ -6,36 +6,39 @@ from unittest.mock import patch, AsyncMock
 @patch("app.api.products.product_service")
 async def test_get_products(mock_service):
     mock_service.get_products = AsyncMock(return_value=[{
-        "id": "1", 
-        "name": "Test Product",
+        "id": "P001",
+        "name": "iPhone 15 Pro Max",
         "category": "smartphone",
         "brand": "Apple",
-        "price": 100000,
+        "price": 21999000,
         "currency": "IDR",
-        "description": "Test description",
+        "description": "iPhone 15 Pro Max dengan titanium design, kamera 48MP, dan performa terbaik",
         "specifications": {
-            "rating": 4.5,
+            "rating": 4.8,
             "sold": 100,
-            "stock": 50,
+            "stock": 25,
             "condition": "Baru",
-            "shop_location": "Jakarta",
-            "shop_name": "Test Shop"
+            "shop_location": "Indonesia",
+            "shop_name": "Apple Store"
         },
-        "images": [],
-        "url": ""
+        "images": ["https://example.com/P001.jpg"],
+        "url": "https://shopee.co.id/P001"
     }])
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/")
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+    assert all("id" in p and "name" in p for p in data)
 
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
 async def test_get_products_with_category(mock_service):
     mock_service.get_products = AsyncMock(return_value=[{
-        "id": "1", 
-        "name": "iPhone",
+        "id": "P001",
+        "name": "iPhone 15 Pro Max",
         "category": "smartphone",
         "brand": "Apple"
     }])
@@ -43,14 +46,17 @@ async def test_get_products_with_category(mock_service):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/?category=smartphone")
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+    assert all(p["category"] == "smartphone" for p in data)
 
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
 async def test_get_products_with_search(mock_service):
     mock_service.get_products = AsyncMock(return_value=[{
-        "id": "1", 
-        "name": "iPhone",
+        "id": "P001",
+        "name": "iPhone 15 Pro Max",
         "category": "smartphone",
         "brand": "Apple"
     }])
@@ -58,7 +64,10 @@ async def test_get_products_with_search(mock_service):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/?search=iPhone")
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+    assert any("iPhone" in p["name"] for p in data)
 
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
@@ -73,14 +82,18 @@ async def test_get_categories(mock_service):
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")
 async def test_search_products(mock_service):
-    mock_service.search_products = AsyncMock(return_value=[{"id": "1", "name": "iPhone"}])
+    mock_service.search_products = AsyncMock(return_value=[{"id": "P001", "name": "iPhone 15 Pro Max"}])
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/products/search?query=iPhone")
     assert resp.status_code == 200
-    assert "products" in resp.json()
-    assert "query" in resp.json()
-    assert resp.json()["source"] == "local"
+    data = resp.json()
+    assert "products" in data
+    assert "query" in data
+    assert data["source"] == "local"
+    assert isinstance(data["products"], list)
+    assert len(data["products"]) > 0
+    assert any("iPhone" in p["name"] for p in data["products"])
 
 @pytest.mark.asyncio
 @patch("app.api.products.product_service")

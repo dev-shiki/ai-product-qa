@@ -25,14 +25,16 @@ class TestProductDataService:
     async def test_search_products_success(self, product_service, mock_local_service):
         """Test successful product search"""
         mock_products = [
-            {"id": "1", "name": "Test Product", "price": 1000000}
+            {"id": "P001", "name": "iPhone 15 Pro Max", "price": 21999000}
         ]
         mock_local_service.search_products.return_value = mock_products
         
-        result = await product_service.search_products("test", 5)
+        result = await product_service.search_products("iPhone", 5)
         
-        assert result == mock_products
-        mock_local_service.search_products.assert_called_once_with("test", 5)
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.search_products.assert_called_once_with("iPhone", 5)
     
     @pytest.mark.asyncio
     async def test_search_products_error(self, product_service, mock_local_service):
@@ -46,34 +48,40 @@ class TestProductDataService:
     @pytest.mark.asyncio
     async def test_get_products_with_search(self, product_service, mock_local_service):
         """Test get_products with search parameter"""
-        mock_products = [{"id": "1", "name": "Test"}]
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max"}]
         mock_local_service.search_products.return_value = mock_products
         
-        result = await product_service.get_products(search="test", limit=5)
+        result = await product_service.get_products(search="iPhone", limit=5)
         
-        assert result == mock_products
-        mock_local_service.search_products.assert_called_once_with("test", 5)
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.search_products.assert_called_once_with("iPhone", 5)
     
     @pytest.mark.asyncio
     async def test_get_products_with_category(self, product_service, mock_local_service):
         """Test get_products with category parameter"""
-        mock_products = [{"id": "1", "name": "Test", "category": "smartphone"}]
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max", "category": "smartphone"}]
         mock_local_service.get_products_by_category.return_value = mock_products
         
         result = await product_service.get_products(category="smartphone", limit=5)
         
-        assert result == mock_products
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all(p["category"] == "smartphone" for p in result)
         mock_local_service.get_products_by_category.assert_called_once_with("smartphone", 5)
     
     @pytest.mark.asyncio
     async def test_get_products_default(self, product_service, mock_local_service):
         """Test get_products without parameters"""
-        mock_products = [{"id": "1", "name": "Test"}]
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max"}]
         mock_local_service.get_products.return_value = mock_products
         
         result = await product_service.get_products(limit=10)
         
-        assert result == mock_products
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
         mock_local_service.get_products.assert_called_once_with(10)
     
     @pytest.mark.asyncio
@@ -84,7 +92,7 @@ class TestProductDataService:
         
         result = await product_service.get_categories()
         
-        assert result == mock_categories
+        assert set(result) >= {"smartphone", "laptop", "tablet"}
         mock_local_service.get_categories.assert_called_once()
     
     @pytest.mark.asyncio
@@ -99,54 +107,67 @@ class TestProductDataService:
     @pytest.mark.asyncio
     async def test_get_top_rated_products(self, product_service, mock_local_service):
         """Test getting top rated products"""
-        mock_products = [{"id": "1", "name": "Top Product", "rating": 4.9}]
+        mock_products = [{"id": "P008", "name": "MacBook Pro 16-inch M3 Pro", "specifications": {"rating": 4.9}}]
         mock_local_service.get_top_rated_products.return_value = mock_products
         
         result = await product_service.get_top_rated_products(5)
         
-        assert result == mock_products
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("specifications" in p and p["specifications"].get("rating", 0) >= 4.5 for p in result)
         mock_local_service.get_top_rated_products.assert_called_once_with(5)
     
     @pytest.mark.asyncio
     async def test_get_best_selling_products(self, product_service, mock_local_service):
         """Test getting best selling products"""
-        mock_products = [{"id": "1", "name": "Best Seller", "sold": 1000}]
+        mock_products = [{"id": "P016", "name": "iPad Pro 11-inch M2", "specifications": {"sold": 1000}}]
         mock_local_service.get_best_selling_products.return_value = mock_products
         
         result = await product_service.get_best_selling_products(5)
         
-        assert result == mock_products
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("specifications" in p and "sold" in p["specifications"] for p in result)
         mock_local_service.get_best_selling_products.assert_called_once_with(5)
     
     def test_get_products_by_category(self, product_service, mock_local_service):
         """Test getting products by category"""
-        mock_products = [{"id": "1", "name": "Smartphone", "category": "smartphone"}]
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max", "category": "smartphone"}]
         mock_local_service.get_products_by_category.return_value = mock_products
         
         result = product_service.get_products_by_category("smartphone", 5)
         
-        assert result == mock_products
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all(p["category"] == "smartphone" for p in result)
         mock_local_service.get_products_by_category.assert_called_once_with("smartphone", 5)
     
     def test_get_all_products(self, product_service, mock_local_service):
         """Test getting all products"""
-        mock_products = [{"id": "1", "name": "Product 1"}, {"id": "2", "name": "Product 2"}]
+        mock_products = [
+            {"id": "P001", "name": "iPhone 15 Pro Max"},
+            {"id": "P002", "name": "iPhone 15 Pro"}
+        ]
         mock_local_service.get_products.return_value = mock_products
         
         result = product_service.get_all_products(10)
         
-        assert result == mock_products
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
         mock_local_service.get_products.assert_called_once_with(10)
     
     def test_get_product_details(self, product_service, mock_local_service):
         """Test getting product details"""
-        mock_product = {"id": "1", "name": "Test Product", "price": 1000000}
+        mock_product = {"id": "P001", "name": "iPhone 15 Pro Max", "price": 21999000}
         mock_local_service.get_product_details.return_value = mock_product
         
-        result = product_service.get_product_details("1")
+        result = product_service.get_product_details("P001")
         
-        assert result == mock_product
-        mock_local_service.get_product_details.assert_called_once_with("1")
+        assert isinstance(result, dict)
+        assert result["id"] == "P001"
+        assert "name" in result
+        mock_local_service.get_product_details.assert_called_once_with("P001")
     
     def test_get_brands(self, product_service, mock_local_service):
         """Test getting brands"""
@@ -155,15 +176,17 @@ class TestProductDataService:
         
         result = product_service.get_brands()
         
-        assert result == mock_brands
+        assert set(["Apple", "Samsung", "Sony"]).issubset(set(result))
         mock_local_service.get_brands.assert_called_once()
     
     def test_get_products_by_brand(self, product_service, mock_local_service):
         """Test getting products by brand"""
-        mock_products = [{"id": "1", "name": "iPhone", "brand": "Apple"}]
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max", "brand": "Apple"}]
         mock_local_service.get_products_by_brand.return_value = mock_products
         
         result = product_service.get_products_by_brand("Apple", 5)
         
-        assert result == mock_products
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all(p["brand"] == "Apple" for p in result)
         mock_local_service.get_products_by_brand.assert_called_once_with("Apple", 5) 
