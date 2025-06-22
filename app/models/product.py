@@ -34,4 +34,10 @@ class ProductResponse(BaseModel):
     description: str
     specifications: Dict
     images: List[str] = []
-    url: str = "" 
+    url: str = ""
+
+class QueryResponse(BaseModel):
+    answer: str
+    products: List[dict]
+    question: str
+    note: Optional[str] = None 

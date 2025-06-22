@@ -68,7 +68,7 @@ class TestProductDataService:
         assert isinstance(result, list)
         assert len(result) > 0
         assert all(p["category"] == "smartphone" for p in result)
-        mock_local_service.get_products_by_category.assert_called_once_with("smartphone", 5)
+        mock_local_service.get_products_by_category.assert_called_once_with("smartphone")
     
     @pytest.mark.asyncio
     async def test_get_products_default(self, product_service, mock_local_service):
@@ -139,7 +139,7 @@ class TestProductDataService:
         assert isinstance(result, list)
         assert len(result) > 0
         assert all(p["category"] == "smartphone" for p in result)
-        mock_local_service.get_products_by_category.assert_called_once_with("smartphone", 5)
+        mock_local_service.get_products_by_category.assert_called_once_with("smartphone")
     
     def test_get_all_products(self, product_service, mock_local_service):
         """Test getting all products"""
@@ -188,4 +188,4 @@ class TestProductDataService:
         assert isinstance(result, list)
         assert len(result) > 0
         assert all(p["brand"] == "Apple" for p in result)
-        mock_local_service.get_products_by_brand.assert_called_once_with("Apple", 5) 
+        mock_local_service.get_products_by_brand.assert_called_once_with("Apple") 

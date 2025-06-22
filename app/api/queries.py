@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.services.product_data_service import ProductDataService
 from app.services.ai_service import AIService
+import re
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ class QueryResponse(BaseModel):
     answer: str
     products: List[dict]
     question: str
+    note: str
 
 @router.post("/ask", response_model=QueryResponse)
 async def ask_question(request: QueryRequest):
@@ -26,14 +28,27 @@ async def ask_question(request: QueryRequest):
     try:
         # Get AI response
         ai_response = await ai_service.get_response(request.question)
-        
-        # Get relevant products
-        products = await product_service.search_products(request.question, limit=5)
-        
+        # Get relevant products and fallback message
+        # Ekstrak kategori dan max_price dari pertanyaan (sederhana)
+        category = None
+        max_price = None
+        for cat in ['laptop', 'smartphone', 'tablet', 'headphone', 'kamera', 'camera', 'audio', 'tv', 'drone', 'jam', 'watch']:
+            if cat in request.question.lower():
+                category = cat
+                break
+        price_match = re.search(r'(\d+)\s*juta', request.question.lower())
+        if price_match:
+            max_price = int(price_match.group(1)) * 1000000
+        elif 'budget' in request.question.lower() or 'murah' in request.question.lower():
+            max_price = 5000000
+        products, fallback_message = await product_service.smart_search_products(
+            keyword=request.question, category=category, max_price=max_price, limit=5
+        )
         return QueryResponse(
             answer=ai_response,
             products=products,
-            question=request.question
+            question=request.question,
+            note=fallback_message
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

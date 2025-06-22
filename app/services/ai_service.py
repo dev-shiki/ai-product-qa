@@ -20,16 +20,34 @@ class AIService:
             raise
 
     async def get_response(self, question: str) -> str:
-        """Get AI response with product context"""
+        """Get AI response with product context and fallback message"""
         try:
             logger.info(f"Getting AI response for question: {question}")
-            
-            # Get relevant products
-            products = await self.product_service.search_products(question, limit=5)
-            
+
+            # Ekstrak kategori dan max_price dari pertanyaan (sederhana)
+            import re
+            category = None
+            max_price = None
+            # Coba deteksi kategori dari kata kunci umum
+            for cat in ['laptop', 'smartphone', 'tablet', 'headphone', 'kamera', 'camera', 'audio', 'tv', 'drone', 'jam', 'watch']:
+                if cat in question.lower():
+                    category = cat
+                    break
+            # Deteksi budget
+            price_match = re.search(r'(\d+)\s*juta', question.lower())
+            if price_match:
+                max_price = int(price_match.group(1)) * 1000000
+            elif 'budget' in question.lower() or 'murah' in question.lower():
+                max_price = 5000000
+
+            # Gunakan smart_search_products
+            products, fallback_message = await self.product_service.smart_search_products(
+                keyword=question, category=category, max_price=max_price, limit=5
+            )
+
             # Build context
             context = f"Question: {question}\n\n"
-            
+            context += f"{fallback_message}\n\n"
             if products:
                 context += "Relevant Products:\n"
                 for i, product in enumerate(products, 1):
@@ -41,13 +59,9 @@ class AIService:
                     context += f"   Description: {product.get('description', 'No description')[:200]}...\n\n"
             else:
                 context += "No specific products found, but I can provide general recommendations.\n\n"
-            
+
             # Create prompt
-            prompt = f"""You are a helpful product assistant. Based on the following context, provide a helpful and informative response:
-
-{context}
-
-Please provide a clear and concise answer that helps the user understand the products and make an informed decision. Focus on being helpful and natural in your response."""
+            prompt = f"""You are a helpful product assistant. Based on the following context, provide a helpful and informative response:\n\n{context}\n\nPlease provide a clear and concise answer that helps the user understand the products and make an informed decision. Focus on being helpful and natural in your response."""
 
             # Generate response using new API format
             response = self.client.models.generate_content(
@@ -57,7 +71,7 @@ Please provide a clear and concise answer that helps the user understand the pro
             
             logger.info("Successfully generated AI response")
             return response.text
-            
+        
         except Exception as e:
             logger.error(f"Error generating AI response: {str(e)}")
             return "Maaf, saya sedang mengalami kesulitan untuk memberikan rekomendasi. Silakan coba lagi nanti."

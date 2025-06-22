@@ -18,7 +18,10 @@ class ProductDataService:
         """Search products using local data"""
         try:
             logger.info(f"Searching products with keyword: {keyword}")
-            products = self.local_service.search_products(keyword, limit)
+            # Use awaitable wrapper for sync method
+            import asyncio
+            loop = asyncio.get_event_loop()
+            products = await loop.run_in_executor(None, self.local_service.search_products, keyword, limit)
             logger.info(f"Found {len(products)} products for keyword: {keyword}")
             return products
         except Exception as e:
@@ -100,4 +103,16 @@ class ProductDataService:
             return self.local_service.get_products_by_brand(brand)[:limit]
         except Exception as e:
             logger.error(f"Error getting products by brand: {str(e)}")
-            return [] 
+            return []
+    
+    async def smart_search_products(self, keyword: str = '', category: str = None, max_price: int = None, limit: int = 5):
+        """
+        Hybrid fallback search: gunakan LocalProductService.smart_search_products secara async.
+        Return: (list produk, pesan)
+        """
+        import asyncio
+        loop = asyncio.get_event_loop()
+        products, message = await loop.run_in_executor(
+            None, self.local_service.smart_search_products, keyword, category, max_price, limit
+        )
+        return products, message 

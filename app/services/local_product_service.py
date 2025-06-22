@@ -295,7 +295,17 @@ class LocalProductService:
             keyword_lower = keyword.lower()
             filtered_products = []
             
+            # Extract price range from keyword
+            max_price = self._extract_price_from_keyword(keyword)
+            
             for product in self.products:
+                product_price = product.get('price', 0)
+                
+                # Check if product matches price range
+                if max_price and product_price <= max_price:
+                    filtered_products.append(product)
+                    continue
+                
                 # Search in name, description, category, brand, and specifications
                 searchable_text = (
                     product.get('name', '') + ' ' +
@@ -308,7 +318,7 @@ class LocalProductService:
                 if keyword_lower in searchable_text:
                     filtered_products.append(product)
             
-            # Sort by relevance (exact matches first)
+            # Sort by relevance (exact matches first, then by price if budget search)
             def relevance_score(product):
                 score = 0
                 if keyword_lower in product.get('name', '').lower():
@@ -317,6 +327,11 @@ class LocalProductService:
                     score += 5
                 if keyword_lower in product.get('category', '').lower():
                     score += 3
+                
+                # For budget searches, prefer lower prices
+                if max_price or any(word in keyword_lower for word in ['murah', 'budget', 'hemat', 'terjangkau']):
+                    score += (10000000 - product.get('price', 0)) / 1000000  # Higher score for lower prices
+                
                 return score
             
             filtered_products.sort(key=relevance_score, reverse=True)
@@ -327,6 +342,48 @@ class LocalProductService:
         except Exception as e:
             logger.error(f"Error searching products: {str(e)}")
             return []
+    
+    def _extract_price_from_keyword(self, keyword: str) -> Optional[int]:
+        """
+        Extract maximum price from keyword
+        """
+        try:
+            keyword_lower = keyword.lower()
+            
+            # Common price patterns
+            price_patterns = [
+                (r'(\d+)\s*juta', lambda x: int(x) * 1000000),
+                (r'(\d+)\s*ribu', lambda x: int(x) * 1000),
+                (r'rp\s*(\d+)', lambda x: int(x)),
+                (r'(\d+)\s*rp', lambda x: int(x)),
+                (r'(\d+)\s*k', lambda x: int(x) * 1000),
+                (r'(\d+)\s*m', lambda x: int(x) * 1000000),
+            ]
+            
+            import re
+            for pattern, converter in price_patterns:
+                match = re.search(pattern, keyword_lower)
+                if match:
+                    return converter(match.group(1))
+            
+            # Budget keywords
+            budget_keywords = {
+                'murah': 5000000,  # 5 juta
+                'budget': 5000000,
+                'hemat': 3000000,  # 3 juta
+                'terjangkau': 4000000,  # 4 juta
+                'ekonomis': 2000000,  # 2 juta
+            }
+            
+            for word, max_price in budget_keywords.items():
+                if word in keyword_lower:
+                    return max_price
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extracting price from keyword: {str(e)}")
+            return None
     
     def get_product_details(self, product_id: str) -> Optional[Dict]:
         """
@@ -430,4 +487,69 @@ class LocalProductService:
             return self.products[:limit]
         except Exception as e:
             logger.error(f"Error getting products: {str(e)}")
-            return [] 
+            return []
+    
+    def smart_search_products(self, keyword: str = '', category: str = None, max_price: int = None, limit: int = 5):
+        """
+        Hybrid fallback search: cari produk sesuai kriteria, lalu fallback bertingkat dengan notifikasi.
+        Return: (list produk, pesan)
+        """
+        keyword_lower = (keyword or '').lower()
+        
+        # Deteksi permintaan "terbaik"
+        is_best_request = 'terbaik' in keyword_lower or 'best' in keyword_lower
+        
+        # 1. Jika user minta "terbaik" tanpa kategori spesifik
+        if is_best_request and not category:
+            # Tampilkan produk terbaik secara umum (top 5 berdasarkan rating)
+            best_products = sorted(self.products, 
+                                 key=lambda x: x.get('specifications', {}).get('rating', 0), 
+                                 reverse=True)
+            return best_products[:limit], "Berikut produk terbaik berdasarkan rating:"
+        
+        # 2. Jika user minta "terbaik" dengan kategori spesifik
+        if is_best_request and category:
+            category_products = [p for p in self.products 
+                               if category.lower() in p.get('category', '').lower()]
+            if category_products:
+                category_products.sort(key=lambda x: x.get('specifications', {}).get('rating', 0), reverse=True)
+                return category_products[:limit], f"Berikut {category} terbaik berdasarkan rating:"
+            else:
+                # Fallback ke produk terbaik secara umum jika kategori tidak ditemukan
+                best_products = sorted(self.products, 
+                                     key=lambda x: x.get('specifications', {}).get('rating', 0), 
+                                     reverse=True)
+                return best_products[:limit], f"Tidak ada produk kategori {category}, berikut produk terbaik secara umum:"
+        
+        # 3. Cari produk yang memenuhi semua kriteria (non-terbaik)
+        results = [
+            p for p in self.products
+            if (not category or category.lower() in p.get('category', '').lower())
+            and (not max_price or p.get('price', 0) <= max_price)
+            and (not keyword or keyword_lower in (p.get('name', '') + ' ' + p.get('description', '') + ' ' + p.get('category', '') + ' ' + p.get('brand', '') + str(p.get('specifications', {}))).lower())
+        ]
+        if results:
+            return results[:limit], "Berikut produk yang sesuai dengan kriteria Anda."
+
+        # 4. Jika tidak ada, cari produk di kategori yang sama (tanpa filter harga)
+        if category:
+            category_results = [
+                p for p in self.products
+                if category.lower() in p.get('category', '').lower()
+            ]
+            if category_results:
+                category_results.sort(key=lambda x: x.get('price', 0))
+                return category_results[:limit], "Tidak ada produk di bawah budget, berikut produk termurah di kategori tersebut."
+
+        # 5. Jika tetap tidak ada, tampilkan produk lain yang sesuai budget
+        if max_price:
+            budget_results = [
+                p for p in self.products
+                if p.get('price', 0) <= max_price
+            ]
+            if budget_results:
+                return budget_results[:limit], "Tidak ada produk di kategori tersebut, berikut produk lain yang sesuai budget Anda."
+
+        # 6. Jika tetap tidak ada, tampilkan produk terpopuler/terlaris
+        popular_results = sorted(self.products, key=lambda x: x.get('specifications', {}).get('sold', 0), reverse=True)
+        return popular_results[:limit], "Tidak ada produk yang sesuai, berikut rekomendasi produk terpopuler." 
