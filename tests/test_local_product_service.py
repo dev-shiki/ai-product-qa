@@ -276,9 +276,15 @@ def test_smart_search_products_budget_fallback():
     """Test smart_search_products budget fallback"""
     service = LocalProductService()
     
-    products, message = service.smart_search_products(keyword="produk murah", category="nonexistent", max_price=1000000, limit=3)
+    # Test dengan kategori yang ada tapi budget terlalu rendah
+    products, message = service.smart_search_products(keyword="smartphone murah", category="smartphone", max_price=1000000, limit=3)
     assert len(products) > 0
-    assert "sesuai budget" in message.lower()
+    assert "termurah" in message.lower()  # Fallback ke kategori termurah
+    
+    # Test dengan kategori tidak ada tapi ada produk di bawah budget
+    products, message = service.smart_search_products(keyword="produk murah", category="nonexistent", max_price=5000000, limit=3)
+    assert len(products) > 0
+    assert "sesuai budget" in message.lower()  # Fallback ke produk sesuai budget
 
 def test_smart_search_products_popular_fallback():
     """Test smart_search_products popular fallback"""
