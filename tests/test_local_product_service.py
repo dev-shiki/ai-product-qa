@@ -229,4 +229,97 @@ def test_search_products_in_specifications(service_with_mock_data):
     result = service_with_mock_data.search_products("A17", 5)
     
     assert len(result) > 0
-    assert any("A17" in str(product.get("specifications", {})) for product in result) 
+    assert any("A17" in str(product.get("specifications", {})) for product in result)
+
+def test_smart_search_products_best_request():
+    """Test smart_search_products with 'terbaik' keyword"""
+    service = LocalProductService()
+    
+    # Test "terbaik" without category
+    products, message = service.smart_search_products(keyword="produk terbaik", limit=3)
+    assert len(products) > 0
+    assert "terbaik" in message.lower()
+    assert "rating" in message.lower()
+    
+    # Test "terbaik" with category
+    products, message = service.smart_search_products(keyword="laptop terbaik", category="laptop", limit=3)
+    assert len(products) > 0
+    assert "laptop" in message.lower()
+    assert "terbaik" in message.lower()
+
+def test_smart_search_products_best_request_no_category():
+    """Test smart_search_products with 'terbaik' but category not found"""
+    service = LocalProductService()
+    
+    products, message = service.smart_search_products(keyword="nonexistent terbaik", category="nonexistent", limit=3)
+    assert len(products) > 0
+    assert "nonexistent" in message.lower()
+    assert "umum" in message.lower()
+
+def test_smart_search_products_exact_match():
+    """Test smart_search_products with exact criteria match"""
+    service = LocalProductService()
+    
+    products, message = service.smart_search_products(keyword="iPhone", category="smartphone", limit=3)
+    assert len(products) > 0
+    assert "sesuai dengan kriteria" in message
+
+def test_smart_search_products_category_fallback():
+    """Test smart_search_products category fallback"""
+    service = LocalProductService()
+    
+    products, message = service.smart_search_products(keyword="laptop mahal", category="laptop", max_price=1000000, limit=3)
+    assert len(products) > 0
+    assert "termurah" in message.lower()
+
+def test_smart_search_products_budget_fallback():
+    """Test smart_search_products budget fallback"""
+    service = LocalProductService()
+    
+    products, message = service.smart_search_products(keyword="produk murah", category="nonexistent", max_price=1000000, limit=3)
+    assert len(products) > 0
+    assert "sesuai budget" in message.lower()
+
+def test_smart_search_products_popular_fallback():
+    """Test smart_search_products popular fallback"""
+    service = LocalProductService()
+    
+    products, message = service.smart_search_products(keyword="produk tidak ada", category="nonexistent", max_price=100, limit=3)
+    assert len(products) > 0
+    assert "terpopuler" in message.lower()
+
+def test_extract_price_from_keyword():
+    """Test _extract_price_from_keyword method"""
+    service = LocalProductService()
+    
+    # Test "5 juta"
+    max_price = service._extract_price_from_keyword("laptop 5 juta")
+    assert max_price == 5000000
+    
+    # Test "budget"
+    max_price = service._extract_price_from_keyword("laptop budget")
+    assert max_price == 5000000
+    
+    # Test "murah"
+    max_price = service._extract_price_from_keyword("laptop murah")
+    assert max_price == 5000000
+    
+    # Test "hemat"
+    max_price = service._extract_price_from_keyword("laptop hemat")
+    assert max_price == 3000000
+    
+    # Test no price
+    max_price = service._extract_price_from_keyword("laptop biasa")
+    assert max_price is None
+
+def test_search_products_with_price_extraction():
+    """Test search_products with price extraction"""
+    service = LocalProductService()
+    
+    # Test with budget keyword
+    products = service.search_products("laptop budget 3 juta", limit=5)
+    assert len(products) > 0
+    
+    # Test with "murah" keyword
+    products = service.search_products("smartphone murah", limit=5)
+    assert len(products) > 0 

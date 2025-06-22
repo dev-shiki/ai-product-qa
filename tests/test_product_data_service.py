@@ -188,4 +188,59 @@ class TestProductDataService:
         assert isinstance(result, list)
         assert len(result) > 0
         assert all(p["brand"] == "Apple" for p in result)
-        mock_local_service.get_products_by_brand.assert_called_once_with("Apple") 
+        mock_local_service.get_products_by_brand.assert_called_once_with("Apple")
+
+    @pytest.mark.asyncio
+    async def test_smart_search_products():
+        """Test smart_search_products method"""
+        service = ProductDataService()
+        
+        # Test with category and budget
+        products, message = await service.smart_search_products(
+            keyword="laptop terbaik", 
+            category="laptop", 
+            max_price=50000000, 
+            limit=3
+        )
+        assert len(products) > 0
+        assert "laptop" in message.lower()
+        assert "terbaik" in message.lower()
+
+    @pytest.mark.asyncio
+    async def test_smart_search_products_no_category():
+        """Test smart_search_products without category"""
+        service = ProductDataService()
+        
+        products, message = await service.smart_search_products(
+            keyword="produk terbaik", 
+            limit=3
+        )
+        assert len(products) > 0
+        assert "terbaik" in message.lower()
+
+    @pytest.mark.asyncio
+    async def test_smart_search_products_budget_only():
+        """Test smart_search_products with budget only"""
+        service = ProductDataService()
+        
+        products, message = await service.smart_search_products(
+            keyword="produk murah", 
+            max_price=1000000, 
+            limit=3
+        )
+        assert len(products) > 0
+        assert "budget" in message.lower()
+
+    @pytest.mark.asyncio
+    async def test_smart_search_products_empty_result():
+        """Test smart_search_products with no matching products"""
+        service = ProductDataService()
+        
+        products, message = await service.smart_search_products(
+            keyword="produk tidak ada", 
+            category="nonexistent", 
+            max_price=100, 
+            limit=3
+        )
+        assert len(products) > 0  # Should fallback to popular products
+        assert "terpopuler" in message.lower() 

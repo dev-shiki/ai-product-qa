@@ -246,4 +246,51 @@ async def test_get_best_selling_products_error(mock_service):
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/queries/products/best-selling")
-    assert resp.status_code == 500 
+    assert resp.status_code == 500
+
+@pytest.mark.asyncio
+@patch("app.api.queries.product_service")
+@patch("app.api.queries.ai_service")
+async def test_ask_question_error(mock_ai, mock_product):
+    """Test error handling in ask_question endpoint"""
+    mock_ai.get_response = AsyncMock(side_effect=Exception("AI Service Error"))
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.post("/api/queries/ask", json={"question": "Test question"})
+    assert resp.status_code == 500
+
+@pytest.mark.asyncio
+@patch("app.api.queries.product_service")
+@patch("app.api.queries.ai_service")
+async def test_ask_question_with_budget(mock_ai, mock_product):
+    """Test ask_question with budget detection"""
+    mock_ai.get_response = AsyncMock(return_value="Jawaban AI dengan budget")
+    mock_product.smart_search_products = AsyncMock(return_value=(
+        [{"id": "P001", "name": "iPhone 15", "price": 14999000}], 
+        "Berikut produk yang sesuai budget 5 juta"
+    ))
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.post("/api/queries/ask", json={"question": "Saya ingin smartphone budget 5 juta"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["answer"] == "Jawaban AI dengan budget"
+    assert "note" in data
+
+@pytest.mark.asyncio
+@patch("app.api.queries.product_service")
+@patch("app.api.queries.ai_service")
+async def test_ask_question_with_category(mock_ai, mock_product):
+    """Test ask_question with category detection"""
+    mock_ai.get_response = AsyncMock(return_value="Jawaban AI dengan kategori")
+    mock_product.smart_search_products = AsyncMock(return_value=(
+        [{"id": "P001", "name": "MacBook Pro", "category": "laptop"}], 
+        "Berikut laptop terbaik"
+    ))
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.post("/api/queries/ask", json={"question": "Saya ingin laptop terbaik"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["answer"] == "Jawaban AI dengan kategori"
+    assert "note" in data 
