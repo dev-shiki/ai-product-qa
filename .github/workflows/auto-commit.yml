@@ -1,10 +1,8 @@
 name: Auto Commit - Test Coverage Improvement
 
 on:
-  push:
-    branches: [ "master" ]
   schedule:
-    # Run every 30 minutes as backup
+    # Run every 30 minutes - this is the main trigger
     - cron: '*/30 * * * *'
   
   # Manual trigger
@@ -25,12 +23,8 @@ jobs:
   auto-commit:
     runs-on: ubuntu-latest
     
-    # IMPORTANT: Skip if last commit was from this workflow (prevent infinite loop)
-    # But allow codecov workflow to run on auto-commits
-    if: |
-      !contains(github.event.head_commit.message, 'Auto-commit:') ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch'
+    # No need to check for auto-commit message since we're not triggered by push
+    # This workflow only runs on schedule or manual trigger
     
     # Prevent multiple runs at the same time - improved safety
     concurrency:
