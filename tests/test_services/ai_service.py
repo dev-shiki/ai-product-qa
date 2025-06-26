@@ -248,7 +248,9 @@ async def test_get_response_product_data_service_failure(ai_service_instance, mo
         ("telepon seluler", "smartphone", None), # Test synonym
         ("komputer baru", "laptop", None), # Test synonym
         ("fotografi gear", "kamera", None), # Test synonym
-        ("speaker bluetooth", "audio", None), # Test synonym, 'speaker' is in 'audio' category
+        ("speaker bluetooth", "audio", None), # Test keyword 'speaker' for 'audio' category
+        ("sound system home theater", "audio", None), # Test keyword 'sound' for 'audio' category
+        ("quadcopter baru", "drone", None), # Test keyword 'quadcopter' for 'drone' category
         ("ponsel android 4 juta", "smartphone", 4_000_000), # Combined
         ("smartwatch 1 juta", "jam", 1_000_000), # Combined
         ("laptop budget", "laptop", 5_000_000), # Category + "budget"
@@ -280,6 +282,9 @@ async def test_get_response_product_data_service_failure(ai_service_instance, mo
         ("laptop budget juta", "laptop", 5_000_000), # "budget" detected, not "juta" regex
         ("LAPTOP GAMING 15 JUTA", "laptop", 15_000_000), # Mixed casing
         ("saya butuh tablet 100 juta", "tablet", 100_000_000), # Large number for price
+        ("produk", None, None), # A generic word that should not trigger category detection
+        ("produk elektronik", None, None), # Another generic word
+        ("kategori tidak terdaftar", None, None), # Ensure unknown categories are None
     ]
 )
 async def test_get_response_category_and_price_detection(
@@ -361,7 +366,7 @@ async def test_get_response_product_context_missing_keys(ai_service_instance, mo
     assert "Rating: 0/5" in prompt # Default for missing rating
     assert "Description: No description..." in prompt # Default for missing description
 
-    # Test for Product 3 (all fields present, but rating missing within specifications)
+    # Test for Product 3 (all fields present, but rating is missing within specifications, or rating itself is 0)
     assert "3. Product C" in prompt
     assert "Price: Rp 5,000,000" in prompt
     assert "Brand: BrandC" in prompt

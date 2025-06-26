@@ -2,8 +2,8 @@ import pytest
 import sys
 import os
 from functools import lru_cache
-from unittest.mock import patch
 from pydantic import ValidationError
+from pathlib import Path
 
 # Define a comprehensive fixture to ensure a clean state for testing module-level imports
 # and cached functions.
@@ -37,6 +37,25 @@ def clean_config_module():
     # Restore sys.path to its initial state to prevent test interference
     sys.path = initial_sys_path
 
+
+@pytest.fixture
+def create_env_file(tmp_path):
+    """
+    Creates a temporary .env file in a temporary directory and changes the CWD
+    to this directory so that pydantic-settings can find the .env file.
+    Restores the original CWD after the test.
+    """
+    original_cwd = os.getcwd()
+    os.chdir(tmp_path) # Change CWD to the temporary directory
+
+    env_file_path = tmp_path / ".env"
+    
+    yield env_file_path # Yield the path for the test to write to
+
+    # Teardown: Restore original CWD and ensure the temporary .env file is removed
+    os.chdir(original_cwd)
+    if env_file_path.exists():
+        env_file_path.unlink()
 
 # Test cases for the Settings class itself
 class TestSettings:
@@ -113,6 +132,38 @@ class TestSettings:
         assert settings.API_HOST == "localhost" # Should fall back to default as not in env or kwargs
         assert settings.FRONTEND_PORT == 8501 # Should fall back to default
         assert settings.DEBUG is True # Should fall back to default
+
+    def test_settings_init_success_from_env_file(self, create_env_file, monkeypatch):
+        """
+        Tests that Settings loads configuration correctly from a .env file,
+        demonstrating the `env_file` attribute functionality.
+        """
+        env_content = """
+        GOOGLE_API_KEY=key_from_env_file
+        API_HOST=host_from_env_file
+        API_PORT=9001
+        DEBUG=false
+        """
+        create_env_file.write_text(env_content.strip())
+
+        # Ensure no conflicting environment variables are set that would override the .env file
+        # pydantic-settings prioritizes env vars over .env file.
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("API_HOST", raising=False)
+        monkeypatch.delenv("API_PORT", raising=False)
+        monkeypatch.delenv("FRONTEND_HOST", raising=False)
+        monkeypatch.delenv("FRONTEND_PORT", raising=False)
+        monkeypatch.delenv("DEBUG", raising=False)
+
+        from app.utils.config import Settings
+        settings = Settings()
+
+        assert settings.GOOGLE_API_KEY == "key_from_env_file"
+        assert settings.API_HOST == "host_from_env_file"
+        assert settings.API_PORT == 9001
+        assert settings.FRONTEND_HOST == "localhost" # Default, as not in .env or env vars
+        assert settings.FRONTEND_PORT == 8501 # Default
+        assert settings.DEBUG is False
 
     def test_settings_init_raises_error_on_missing_google_api_key(self, monkeypatch, caplog):
         """
@@ -208,7 +259,7 @@ class TestSettings:
             Settings()
         
         assert "API_PORT" in str(excinfo.value)
-        assert "value is not a valid integer" in str(excinfo.value)
+        assert any(msg in str(excinfo.value) for msg in ["value is not a valid integer", "Input should be a valid integer", "Input should be a valid number", "invalid literal for int()"])
 
     def test_settings_init_fails_on_invalid_debug_type(self, monkeypatch):
         """
@@ -223,7 +274,7 @@ class TestSettings:
             Settings()
         
         assert "DEBUG" in str(excinfo.value)
-        assert "value could not be parsed to a boolean" in str(excinfo.value)
+        assert any(msg in str(excinfo.value) for msg in ["value could not be parsed to a boolean", "Input should be a valid boolean"])
 
     def test_settings_init_success_debug_from_string_true(self, monkeypatch):
         """

@@ -148,7 +148,6 @@ class TestProductDataService:
         
         product_data_service.local_service.search_products.assert_called_once_with("any", 0)
 
-
     @pytest.mark.asyncio
     async def test_get_products_with_search(self, product_data_service, mock_run_in_executor):
         """Test get_products dispatches to search_products when 'search' keyword is present."""
@@ -275,7 +274,7 @@ class TestProductDataService:
     async def test_get_products_exception_in_fallback(self, product_data_service, mock_run_in_executor, caplog):
         """
         Test get_products when the initial call fails, and the fallback local_service.get_products also fails,
-        leading to the exception propagating.
+        leading to the exception propagating (for search path).
         """
         # Simulate the initial path (e.g., search_products) raising an exception
         mock_run_in_executor.side_effect = Exception("Initial search path failed")
@@ -293,6 +292,52 @@ class TestProductDataService:
         # Verify both underlying calls were made
         product_data_service.local_service.search_products.assert_called_once_with("double_fail", 5) # Triggered by the search path
         product_data_service.local_service.get_products.assert_called_once_with(5) # The fallback call
+
+    @pytest.mark.asyncio
+    async def test_get_products_category_path_and_fallback_exception(self, product_data_service, mocker, caplog):
+        """
+        Test get_products when the category path fails, and the fallback local_service.get_products also fails,
+        leading to the exception propagating.
+        """
+        # Simulate the category path (get_products_by_category) raising an exception
+        mocker.patch.object(product_data_service, 'get_products_by_category', side_effect=Exception("Category path failed"))
+
+        # Simulate the fallback call (local_service.get_products) also raising an exception
+        product_data_service.local_service.get_products.side_effect = Exception("Fallback local service failed")
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(Exception, match="Fallback local service failed"):
+                await product_data_service.get_products(category="double_fail_cat", limit=7)
+            
+            # Verify the first error was logged. The second exception propagates out.
+            assert "Error getting products: Category path failed" in caplog.text
+        
+        # Verify both underlying calls were made
+        product_data_service.get_products_by_category.assert_called_once_with("double_fail_cat", 7)
+        product_data_service.local_service.get_products.assert_called_once_with(7)
+
+    @pytest.mark.asyncio
+    async def test_get_products_no_filters_path_and_fallback_exception(self, product_data_service, mocker, caplog):
+        """
+        Test get_products when the no-filters path fails, and the fallback local_service.get_products also fails,
+        leading to the exception propagating.
+        """
+        # Simulate the no-filters path (get_all_products) raising an exception
+        mocker.patch.object(product_data_service, 'get_all_products', side_effect=Exception("All products path failed"))
+
+        # Simulate the fallback call (local_service.get_products) also raising an exception
+        product_data_service.local_service.get_products.side_effect = Exception("Fallback local service failed")
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(Exception, match="Fallback local service failed"):
+                await product_data_service.get_products(limit=12)
+            
+            # Verify the first error was logged. The second exception propagates out.
+            assert "Error getting products: All products path failed" in caplog.text
+        
+        # Verify both underlying calls were made
+        product_data_service.get_all_products.assert_called_once_with(12)
+        product_data_service.local_service.get_products.assert_called_once_with(12)
 
 
     @pytest.mark.asyncio

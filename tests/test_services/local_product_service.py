@@ -255,6 +255,7 @@ def test_load_local_products_valid_json_utf8(mock_logger):
         
         # Verify that open was called with utf-8 encoding (and potentially others if previous ones failed)
         # It's important to check the *last* successful call's encoding.
+        # Here, it implies utf-16-le, utf-16 fail or not called, then utf-8 succeeds.
         assert builtins.open.call_args.kwargs['encoding'] == 'utf-8'
 
 def test_load_local_products_valid_json_utf16le_with_bom(mock_logger):
@@ -280,7 +281,7 @@ def test_load_local_products_valid_json_utf16le_with_bom(mock_logger):
         else:
             # For other encodings, return content that will cause JSONDecodeError
             # (they shouldn't be reached if utf-16-le succeeds)
-            m_file.read.return_value = "invalid json"
+            m_file.read.return_value = "invalid json" # This branch implies an issue if it's hit.
         return m_file
 
     with patch('app.services.local_product_service.Path') as MockPath, \
@@ -298,11 +299,13 @@ def test_load_local_products_valid_json_utf16le_with_bom(mock_logger):
         # Verify open was called with 'utf-16-le' and succeeded, and it was the first attempt.
         assert builtins.open.call_args_list[0].kwargs['encoding'] == 'utf-16-le'
         mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using utf-16-le encoding")
-        mock_logger.warning.assert_not_called() # No warnings if first attempt succeeds
+        # Ensure only warnings for failed encodings *before* the successful one are called
+        assert mock_logger.warning.call_count == 0 # No failures before utf-16-le
+        assert builtins.open.call_count == 1 # Only one successful call
 
 def test_load_local_products_valid_json_utf8_sig_succeeds_after_utf8_fails(mock_logger):
     """
-    Test _load_local_products where utf-8 fails with UnicodeDecodeError, but utf-8-sig succeeds.
+    Test _load_local_products where utf-16-le, utf-16, and utf-8 fail with UnicodeDecodeError, but utf-8-sig succeeds.
     """
     mock_json_content_str = json.dumps({"products": MOCK_PRODUCTS_RAW_FOR_JSON})
     
@@ -337,6 +340,7 @@ def test_load_local_products_valid_json_utf8_sig_succeeds_after_utf8_fails(mock_
         
         mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using utf-8-sig encoding")
         # Verify warnings for previous failed attempts
+        assert mock_logger.warning.call_count == 3
         mock_logger.warning.assert_any_call(f"Failed to load with utf-16-le encoding: mockcodec: mock reason for utf-16-le")
         mock_logger.warning.assert_any_call(f"Failed to load with utf-16 encoding: mockcodec: mock reason for utf-16")
         mock_logger.warning.assert_any_call(f"Failed to load with utf-8 encoding: mockcodec: mock reason for utf-8")
@@ -387,6 +391,46 @@ def test_load_local_products_valid_json_latin1_succeeds_after_others_fail(mock_l
         # Verify `open` calls order and count
         assert builtins.open.call_count == 5
         assert builtins.open.call_args_list[4].kwargs['encoding'] == 'latin-1'
+
+def test_load_local_products_valid_json_cp1252_succeeds_after_others_fail(mock_logger):
+    """
+    Test _load_local_products where all encodings fail except cp1252.
+    """
+    mock_json_content_str = json.dumps({"products": MOCK_PRODUCTS_RAW_FOR_JSON})
+    
+    mock_file_path = MagicMock(spec=Path)
+    mock_file_path.exists.return_value = True
+
+    def open_side_effect(file_path_arg, mode, encoding):
+        m_file = MagicMock()
+        if encoding in ['utf-16-le', 'utf-16', 'utf-8', 'utf-8-sig', 'latin-1']:
+            raise UnicodeDecodeError("mockcodec", b"", 0, 1, f"mock reason for {encoding}")
+        elif encoding == 'cp1252': # This one succeeds
+            m_file.read.return_value = mock_json_content_str
+            return m_file
+        else:
+            pytest.fail(f"Open called with unexpected encoding: {encoding}")
+
+    with patch('app.services.local_product_service.Path') as MockPath, \
+         patch('builtins.open', side_effect=open_side_effect), \
+         patch('random.randint', return_value=1000):
+        
+        MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
+
+        service = LocalProductService() 
+        products = service._load_local_products()
+        
+        assert len(products) == len(TRANSFORMED_MOCK_PRODUCTS_DATA)
+        assert products == TRANSFORMED_MOCK_PRODUCTS_DATA
+        
+        mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using cp1252 encoding")
+        # Verify warnings for previous failed attempts
+        assert mock_logger.warning.call_count == 5
+        assert any(f"Failed to load with {e} encoding" in call_args[0][0] for e in ['utf-16-le', 'utf-16', 'utf-8', 'utf-8-sig', 'latin-1'] for call_args in mock_logger.warning.call_args_list)
+        
+        # Verify `open` calls order and count
+        assert builtins.open.call_count == 6
+        assert builtins.open.call_args_list[5].kwargs['encoding'] == 'cp1252'
 
 
 def test_load_local_products_invalid_json_all_encodings_fail(mock_logger):
