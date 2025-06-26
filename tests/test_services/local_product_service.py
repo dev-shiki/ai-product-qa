@@ -6,16 +6,13 @@ import random
 from typing import List, Dict
 from pathlib import Path
 import sys
-import builtins # Added for patching open
+import builtins
 
 # Add the parent directory of 'app' to the sys.path
 # This allows imports like 'from app.services.local_product_service import LocalProductService'
 # to work correctly when tests are run from a different root.
-# Assuming the test file is at 'project_root/app/test_services/test_local_product_service.py'
-# and the source file is at 'project_root/app/services/local_product_service.py'.
-# The sys.path adjustment should point to 'project_root'.
 current_file_path = Path(__file__).resolve()
-project_root = current_file_path.parent.parent.parent # Navigate up from app/test_services/test_local_product_service.py to project_root
+project_root = current_file_path.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.services.local_product_service import LocalProductService
@@ -124,6 +121,18 @@ MOCK_PRODUCTS_RAW_FOR_JSON = [
             "rating": 4.2,
             "stock_count": 70,
         },
+    },
+    # Add a product with no specifications field for search_products test
+    {
+        "id": "prod9",
+        "name": "Product Without Specs",
+        "category": "Category1",
+        "brand": "BrandX",
+        "price": 250000,
+        "description": "This product explicitly lacks a specifications dictionary.",
+        "reviews_count": 0,
+        "images": ["url_g.jpg"],
+        "url": "url_g"
     }
 ]
 
@@ -170,6 +179,11 @@ TRANSFORMED_MOCK_PRODUCTS_DATA = [
         "id": "prod8", "name": "Custom Spec Product", "category": "Electronics", "brand": "", "price": 750000, "currency": "IDR", "description": "",
         "specifications": {"rating": 4.2, "sold": 1000, "stock": 70, "condition": "Baru", "shop_location": "Indonesia", "shop_name": "Unknown Store", "custom_field": "custom_value"},
         "availability": "in_stock", "reviews_count": 0, "images": ["https://example.com/prod8.jpg"], "url": "https://shopee.co.id/prod8"
+    },
+    {   # prod9 - no specs field
+        "id": "prod9", "name": "Product Without Specs", "category": "Category1", "brand": "BrandX", "price": 250000, "currency": "IDR", "description": "This product explicitly lacks a specifications dictionary.",
+        "specifications": {"rating": 0, "sold": 1000, "stock": 0, "condition": "Baru", "shop_location": "Indonesia", "shop_name": "BrandX Store"},
+        "availability": "in_stock", "reviews_count": 0, "images": ["https://example.com/prod9.jpg"], "url": "https://shopee.co.id/prod9"
     }
 ]
 
@@ -872,6 +886,19 @@ def test_search_products_keyword_in_category_brand_specs(mock_local_product_serv
     assert len(results) == 1
     assert results[0]['id'] == 'prod1'
 
+def test_search_products_with_no_specs_field(mock_local_product_service_instance):
+    """
+    Test search_products when a product has no 'specifications' field.
+    The str(product.get('specifications', {})) should handle this gracefully.
+    """
+    service = mock_local_product_service_instance
+    results = service.search_products("lacks specifications") # prod9 has this in description
+    assert len(results) == 1
+    assert results[0]['id'] == 'prod9'
+
+    results_no_match = service.search_products("nonexistent_spec_value")
+    assert len(results_no_match) == 0
+
 def test_search_products_price_extraction_juta(mock_local_product_service_instance):
     """
     Test search_products with price extraction from keyword (e.g., "juta").
@@ -879,13 +906,13 @@ def test_search_products_price_extraction_juta(mock_local_product_service_instan
     service = mock_local_product_service_instance
     results = service.search_products("product 1 juta") # Should include products <= 1,000,000
     product_ids = {p['id'] for p in results}
-    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod8', 'prod7'} # Product D, F are > 1 juta
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod8', 'prod7', 'prod9'} # Product D, F are > 1 juta
     assert product_ids == expected_ids
     assert all(p['price'] <= 1000000 for p in results)
     
     # Check sorting for relevance with price filter
-    # Prod1, prod2, prod3, prod5 contain "product" in name/desc. prod7, prod8 don't.
-    # Among prod1,prod2,prod3,prod5, prod1 has highest score due to "Product A" exact match
+    # Prod1, prod2, prod3, prod5, prod9 contain "product" in name/desc. prod7, prod8 don't.
+    # Among prod1,prod2,prod3,prod5,prod9, prod1 has highest score due to "Product A" exact match
     assert results[0]['id'] == 'prod1' # "Product A" match
     
     # After Prod1, Prod2, Prod3, Prod5.prod7 (price 0) and prod3 (price 50k) would be high due to budget score.
@@ -920,13 +947,13 @@ def test_search_products_price_extraction_k_m(mock_local_product_service_instanc
     service = mock_local_product_service_instance
     results = service.search_products("product 300k") # Should include products <= 300,000
     product_ids = {p['id'] for p in results}
-    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod7'}
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod7', 'prod9'}
     assert product_ids == expected_ids
     assert all(p['price'] <= 300000 for p in results)
 
     results = service.search_products("gadget 5M") # Should include products <= 5,000,000
     product_ids = {p['id'] for p in results}
-    expected_ids = {'prod1', 'prod2', 'prod3', 'prod4', 'prod5', 'prod6', 'prod7', 'prod8'}
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod4', 'prod5', 'prod6', 'prod7', 'prod8', 'prod9'}
     assert product_ids == expected_ids
     assert all(p['price'] <= 5000000 for p in results)
 
@@ -946,7 +973,7 @@ def test_search_products_price_extraction_budget_keyword(mock_local_product_serv
     # Exact ordering can depend on tie-breaking in sort, so we check for presence among top.
     
     product_ids = {p['id'] for p in results}
-    expected_ids = {'prod1', 'prod2', 'prod3', 'prod4', 'prod5', 'prod6', 'prod7', 'prod8'}
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod4', 'prod5', 'prod6', 'prod7', 'prod8', 'prod9'}
     assert product_ids == expected_ids
     assert all(p['price'] <= 5000000 for p in results)
 
@@ -1145,7 +1172,7 @@ def test_get_categories(mock_local_product_service_instance):
     """
     service = mock_local_product_service_instance
     categories = service.get_categories()
-    assert sorted(categories) == sorted(['Category1', 'Category2', 'Category3', 'Electronics', '']) # '' for prod7, prod8 missing category
+    assert sorted(categories) == sorted(['Category1', 'Category2', 'Category3', 'Electronics', '']) # '' for prod7, prod8, prod9 missing category (prod9 does have it now, but for completeness)
 
 def test_get_categories_empty_products_list():
     """
@@ -1215,9 +1242,9 @@ def test_get_products_by_category_found(mock_local_product_service_instance):
     """
     service = mock_local_product_service_instance
     products = service.get_products_by_category("Category1")
-    assert len(products) == 3
+    assert len(products) == 4
     assert all(p['category'] == 'Category1' for p in products)
-    assert {'prod1', 'prod3', 'prod5'} == {p['id'] for p in products}
+    assert {'prod1', 'prod3', 'prod5', 'prod9'} == {p['id'] for p in products}
 
 def test_get_products_by_category_case_insensitivity(mock_local_product_service_instance):
     """
@@ -1225,7 +1252,7 @@ def test_get_products_by_category_case_insensitivity(mock_local_product_service_
     """
     service = mock_local_product_service_instance
     products = service.get_products_by_category("category1")
-    assert len(products) == 3
+    assert len(products) == 4
     assert all(p['category'] == 'Category1' for p in products)
 
 def test_get_products_by_category_not_found(mock_local_product_service_instance):
@@ -1264,9 +1291,9 @@ def test_get_products_by_brand_found(mock_local_product_service_instance):
     """
     service = mock_local_product_service_instance
     products = service.get_products_by_brand("BrandX")
-    assert len(products) == 3
+    assert len(products) == 4
     assert all(p['brand'] == 'BrandX' for p in products)
-    assert {'prod1', 'prod3', 'prod5'} == {p['id'] for p in products}
+    assert {'prod1', 'prod3', 'prod5', 'prod9'} == {p['id'] for p in products}
 
 def test_get_products_by_brand_case_insensitivity(mock_local_product_service_instance):
     """
@@ -1274,7 +1301,7 @@ def test_get_products_by_brand_case_insensitivity(mock_local_product_service_ins
     """
     service = mock_local_product_service_instance
     products = service.get_products_by_brand("brandx")
-    assert len(products) == 3
+    assert len(products) == 4
     assert all(p['brand'] == 'BrandX' for p in products)
 
 def test_get_products_by_brand_not_found(mock_local_product_service_instance):
@@ -1317,7 +1344,7 @@ def test_get_top_rated_products(mock_local_product_service_instance):
     products = service.get_top_rated_products(limit=3)
     assert len(products) == 3
     # Based on TRANSFORMED_MOCK_PRODUCTS_DATA ratings:
-    # prod3 (4.9), prod5 (4.6), prod1 (4.5), prod8 (4.2), prod4 (4.0), prod2 (3.8), prod6 (3.0), prod7 (0)
+    # prod3 (4.9), prod5 (4.6), prod1 (4.5), prod8 (4.2), prod4 (4.0), prod2 (3.8), prod6 (3.0), prod7 (0), prod9 (0)
     assert products[0]['id'] == 'prod3'
     assert products[1]['id'] == 'prod5'
     assert products[2]['id'] == 'prod1'
@@ -1405,6 +1432,7 @@ def test_get_best_selling_products(mock_local_product_service_instance, mock_log
         elif p['id'] == 'prod6': p['specifications']['sold'] = 50
         elif p['id'] == 'prod7': p['specifications']['sold'] = 10 # Lowest
         elif p['id'] == 'prod8': p['specifications']['sold'] = 200 # In between
+        elif p['id'] == 'prod9': p['specifications']['sold'] = 150 # In between
 
     service = mock_local_product_service_instance
     with patch.object(service, 'products', products_for_sold_test):
@@ -1434,6 +1462,7 @@ def test_get_best_selling_products_limit_greater_than_available(mock_local_produ
         elif p['id'] == 'prod6': p['specifications']['sold'] = 50
         elif p['id'] == 'prod7': p['specifications']['sold'] = 10
         elif p['id'] == 'prod8': p['specifications']['sold'] = 200
+        elif p['id'] == 'prod9': p['specifications']['sold'] = 150
 
     service = mock_local_product_service_instance
     with patch.object(service, 'products', products_for_sold_test):
@@ -1577,7 +1606,8 @@ def test_smart_search_products_best_request_specific_category_found(mock_local_p
     service = mock_local_product_service_instance
     products, message = service.smart_search_products(keyword="terbaik Category1", category="Category1", limit=2)
     assert len(products) == 2
-    # Products in Category1: prod1 (4.5), prod3 (4.9), prod5 (4.6)
+    # Products in Category1: prod1 (4.5), prod3 (4.9), prod5 (4.6), prod9 (0)
+    # Sorted by rating: prod3 (4.9), prod5 (4.6)
     assert products[0]['id'] == 'prod3' 
     assert products[1]['id'] == 'prod5' 
     assert message == "Berikut Category1 terbaik berdasarkan rating:"
@@ -1602,9 +1632,10 @@ def test_smart_search_products_all_criteria_match(mock_local_product_service_ins
     service = mock_local_product_service_instance
     products, message = service.smart_search_products(keyword="Product A", category="Category1", max_price=150000, limit=2)
     assert len(products) == 2
-    # Products matching: prod1 (100k, Category1), prod5 (150k, Category1)
-    # The internal search algorithm will filter first, then sort by relevance.
-    # Keyword "Product A" matches prod1.
+    # Products matching: prod1 (100k, Category1), prod5 (150k, Category1), prod7 (0k, no cat), prod9 (250k, Category1 but overprice)
+    # Filtered by price: prod1, prod5, prod7
+    # Filtered by category (Category1): prod1, prod5
+    # Filtered by keyword (Product A): prod1, prod5
     expected_ids = {'prod1', 'prod5'}
     actual_ids = {p['id'] for p in products}
     assert actual_ids == expected_ids
@@ -1659,6 +1690,7 @@ def test_smart_search_products_no_match_all_fallbacks_popular(mock_local_product
         elif p['id'] == 'prod6': p['specifications']['sold'] = 50
         elif p['id'] == 'prod7': p['specifications']['sold'] = 10
         elif p['id'] == 'prod8': p['specifications']['sold'] = 200
+        elif p['id'] == 'prod9': p['specifications']['sold'] = 150
 
     with patch.object(service, 'products', products_for_sold_test):
         products, message = service.smart_search_products(keyword="CompletelyUniqueKeyword", category="UnknownCategory", max_price=10, limit=2)
@@ -1675,10 +1707,10 @@ def test_smart_search_products_empty_keyword_only_category(mock_local_product_se
     service = mock_local_product_service_instance
     products, message = service.smart_search_products(keyword="", category="Category1", limit=2)
     assert len(products) == 2
-    # Should find all products in Category1, limit 2. These are prod1, prod3, prod5.
+    # Should find all products in Category1, limit 2. These are prod1, prod3, prod5, prod9.
     # The actual order might vary based on default sorting if keyword isn't active.
     # When keyword is empty, and no max_price, score is 0. So original list order applies due to stable sort.
-    # prod1, prod3, prod5 are in Category1. Original order is prod1, then prod3, then prod5.
+    # prod1, prod3, prod5, prod9 are in Category1. Original order is prod1, then prod3, then prod5, then prod9.
     assert products[0]['id'] == 'prod1'
     assert products[1]['id'] == 'prod3'
     assert message == "Berikut produk yang sesuai dengan kriteria Anda."
@@ -1710,6 +1742,18 @@ def test_smart_search_products_empty_all_filters(mock_local_product_service_inst
     assert products == TRANSFORMED_MOCK_PRODUCTS_DATA[:2]
     assert message == "Berikut produk yang sesuai dengan kriteria Anda."
 
+def test_smart_search_products_keyword_none(mock_local_product_service_instance):
+    """
+    Test smart_search_products with keyword explicitly set to None.
+    Should behave like an empty keyword.
+    """
+    service = mock_local_product_service_instance
+    products, message = service.smart_search_products(keyword=None, limit=2)
+    assert len(products) == 2
+    assert products == TRANSFORMED_MOCK_PRODUCTS_DATA[:2]
+    assert message == "Berikut produk yang sesuai dengan kriteria Anda."
+
+
 def test_smart_search_products_default_limit(mock_local_product_service_instance):
     """
     Test smart_search_products using its default limit (5) when not explicitly provided.
@@ -1718,7 +1762,7 @@ def test_smart_search_products_default_limit(mock_local_product_service_instance
     products, message = service.smart_search_products(keyword="Product")
     assert len(products) == 5
     # The first 5 products matching "Product" keyword should be returned, sorted by relevance.
-    # prod1, prod2, prod3, prod5, prod6, prod7, prod8 all have "Product" or similar.
+    # prod1, prod2, prod3, prod5, prod6, prod7, prod8, prod9 all have "Product" or similar.
     # Sorting from test_search_products_relevance_sorting_budget_preference for "product murah"
     # showed prod7, prod3, prod1 at top. If no "murah", order is different.
     # When just "Product", relevance is based on name/description matches.
