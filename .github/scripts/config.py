@@ -74,7 +74,7 @@ FILE_PATTERNS = {
 
 # Environment variables
 ENV_VARS = {
-    "GEMINI_API_KEY": os.getenv("GOOGLE_API_KEY"),
+    "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
     "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN"),
     "GITHUB_REPOSITORY": os.getenv("GITHUB_REPOSITORY"),
     "GITHUB_SHA": os.getenv("GITHUB_SHA"),
