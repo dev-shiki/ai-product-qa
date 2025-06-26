@@ -14,17 +14,7 @@ on:
         default: 'false'
         type: boolean
 
-  # Run on push to main branch - WITH PROTECTION against infinite loop
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - '**.md'
-      - '.github/workflows/auto-commit.yml'
-      - 'orchestrator.log'
-      - 'workflow_*.json'
-      - 'workflow_*.txt'
-
+ 
 jobs:
   auto-commit:
     runs-on: ubuntu-latest
