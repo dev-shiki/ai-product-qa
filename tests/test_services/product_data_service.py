@@ -110,6 +110,9 @@ class TestProductDataService:
             assert "Found 1 products for keyword: laptop" in caplog.text
         
         # Verify run_in_executor was called with the correct local_service method and arguments
+        # The mock_run_in_executor fixture sets loop.run_in_executor.return_value to an AsyncMock
+        # It's mock_local_service.search_products that's passed as the callable to run_in_executor
+        # So we assert on mock_local_service itself.
         product_data_service.local_service.search_products.assert_called_once_with("laptop", 5)
 
     @pytest.mark.asyncio
@@ -166,56 +169,87 @@ class TestProductDataService:
 
 
     @pytest.mark.asyncio
-    async def test_get_products_with_search(self, product_data_service, mock_run_in_executor):
+    async def test_get_products_with_search(self, product_data_service, mock_run_in_executor, mocker):
         """Test get_products dispatches to search_products when 'search' keyword is present."""
         expected_products = [{"id": "s1", "name": "Search Result"}]
         # Mock the underlying call that search_products uses
         product_data_service.local_service.search_products.return_value = expected_products
         mock_run_in_executor.return_value = expected_products # Ensures the await in search_products gets the value
         
+        # Ensure internal methods for category and all products are not called
+        mocker.patch.object(product_data_service, 'get_products_by_category')
+        mocker.patch.object(product_data_service, 'get_all_products')
+
         products = await product_data_service.get_products(search="query", limit=5)
         assert products == expected_products
-        # Verify that local_service.search_products was called via run_in_executor
+        # Verify that local_service.search_products was called via run_in_executor (indirectly by search_products)
         product_data_service.local_service.search_products.assert_called_once_with("query", 5)
+        product_data_service.get_products_by_category.assert_not_called()
+        product_data_service.get_all_products.assert_not_called()
+
 
     @pytest.mark.asyncio
-    async def test_get_products_with_category(self, product_data_service):
-        """Test get_products dispatches to get_products_by_category when 'category' is present."""
+    async def test_get_products_with_category(self, product_data_service, mocker):
+        """
+        Test get_products dispatches to get_products_by_category when 'category' is present,
+        and verifies the arguments passed to the internal method.
+        """
         expected_products = [{"id": "c1", "name": "Category Item"}]
-        # This will be called by ProductDataService's get_products_by_category method, not directly by get_products
-        product_data_service.local_service.get_products_by_category.return_value = expected_products
+        # Patch the internal method of ProductDataService to control its return value and verify calls
+        mock_get_products_by_category = mocker.patch.object(
+            product_data_service, 'get_products_by_category', return_value=expected_products
+        )
         
         products = await product_data_service.get_products(category="electronics", limit=10)
         assert products == expected_products
-        # local_service's method is called by the ProductDataService's internal method
-        product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
+        # Verify that the internal method was called with the correct arguments
+        mock_get_products_by_category.assert_called_once_with("electronics", 10)
+        # Ensure search_products was not called (its underlying local service method)
+        product_data_service.local_service.search_products.assert_not_called()
+        # Ensure get_all_products was not called (its underlying local service method)
+        product_data_service.local_service.get_products.assert_not_called() 
+
 
     @pytest.mark.asyncio
-    async def test_get_products_no_filters(self, product_data_service):
-        """Test get_products dispatches to get_all_products when no filters are present."""
+    async def test_get_products_no_filters(self, product_data_service, mocker):
+        """
+        Test get_products dispatches to get_all_products when no filters are present,
+        and verifies the arguments passed to the internal method.
+        """
         expected_products = [{"id": "a1", "name": "All Item"}]
-        # This will be called by ProductDataService's get_all_products method
-        product_data_service.local_service.get_products.return_value = expected_products
+        # Patch the internal method of ProductDataService to control its return value and verify calls
+        mock_get_all_products = mocker.patch.object(
+            product_data_service, 'get_all_products', return_value=expected_products
+        )
         
         products = await product_data_service.get_products(limit=15)
         assert products == expected_products
-        # local_service's method is called by the ProductDataService's internal method
-        product_data_service.local_service.get_products.assert_called_once_with(15)
+        # Verify that the internal method was called with the correct arguments
+        mock_get_all_products.assert_called_once_with(15)
+        # Ensure search_products and get_products_by_category were not called (their underlying local service methods)
+        product_data_service.local_service.search_products.assert_not_called()
+        product_data_service.local_service.get_products_by_category.assert_not_called() 
+
 
     @pytest.mark.asyncio
-    async def test_get_products_search_precedence(self, product_data_service, mock_run_in_executor):
+    async def test_get_products_search_precedence(self, product_data_service, mock_run_in_executor, mocker):
         """Test get_products prioritizes 'search' over 'category' if both are provided."""
         expected_products = [{"id": "s_prec", "name": "Search Precedence"}]
         product_data_service.local_service.search_products.return_value = expected_products
         mock_run_in_executor.return_value = expected_products
 
+        # Ensure internal methods for category and all products are not called by patching them directly
+        mocker.patch.object(product_data_service, 'get_products_by_category')
+        mocker.patch.object(product_data_service, 'get_all_products')
+
         products = await product_data_service.get_products(search="query", category="ignored", limit=5)
         assert products == expected_products
         product_data_service.local_service.search_products.assert_called_once_with("query", 5)
-        product_data_service.local_service.get_products_by_category.assert_not_called() # Ensure category path was not taken
+        product_data_service.get_products_by_category.assert_not_called() 
+        product_data_service.get_all_products.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_get_products_exception_fallback(self, product_data_service, mock_run_in_executor, caplog):
+    async def test_get_products_exception_fallback(self, product_data_service, mock_run_in_executor, caplog, mocker):
         """Test get_products falls back to local_service.get_products on error in 'search' dispatch."""
         # Simulate an error in the search path to trigger the fallback
         mock_run_in_executor.side_effect = Exception("Search path failed")
@@ -224,6 +258,11 @@ class TestProductDataService:
         fallback_products = [{"id": "fallback", "name": "Fallback Product"}]
         product_data_service.local_service.get_products.return_value = fallback_products
 
+        # Ensure internal methods for category and all products are not called by patching them directly
+        mocker.patch.object(product_data_service, 'get_products_by_category')
+        mocker.patch.object(product_data_service, 'get_all_products')
+
+
         with caplog.at_level(logging.ERROR):
             products = await product_data_service.get_products(search="err", limit=5)
             assert products == fallback_products
@@ -231,6 +270,9 @@ class TestProductDataService:
         
         # Verify fallback call
         product_data_service.local_service.get_products.assert_called_once_with(5)
+        product_data_service.get_products_by_category.assert_not_called() 
+        product_data_service.get_all_products.assert_not_called()
+
 
     @pytest.mark.asyncio
     async def test_get_products_with_category_exception_fallback(self, product_data_service, mocker, caplog):
@@ -239,7 +281,7 @@ class TestProductDataService:
         get_products_by_category (called internally) raises an exception.
         """
         # Patch the internal method get_products_by_category to raise an exception
-        mocker.patch.object(product_data_service, 'get_products_by_category', side_effect=Exception("Category processing failed"))
+        mock_get_products_by_category = mocker.patch.object(product_data_service, 'get_products_by_category', side_effect=Exception("Category processing failed"))
         
         # Configure fallback method's return value
         fallback_products = [{"id": "fallback_cat", "name": "Fallback Category Product"}]
@@ -251,9 +293,8 @@ class TestProductDataService:
             assert "Error getting products: Category processing failed" in caplog.text
         
         # Verify that get_products_by_category was attempted and then fallback occurred
-        product_data_service.get_products_by_category.assert_called_once_with("error_cat", 7)
+        mock_get_products_by_category.assert_called_once_with("error_cat", 7)
         product_data_service.local_service.get_products.assert_called_once_with(7)
-
 
     @pytest.mark.asyncio
     async def test_get_products_no_filters_exception_fallback(self, product_data_service, mocker, caplog):
@@ -262,7 +303,7 @@ class TestProductDataService:
         get_all_products (called internally) raises an exception.
         """
         # Patch the internal method get_all_products to raise an exception
-        mocker.patch.object(product_data_service, 'get_all_products', side_effect=Exception("All products processing failed"))
+        mock_get_all_products = mocker.patch.object(product_data_service, 'get_all_products', side_effect=Exception("All products processing failed"))
         
         # Configure fallback method's return value
         fallback_products = [{"id": "fallback_all", "name": "Fallback All Product"}]
@@ -274,19 +315,25 @@ class TestProductDataService:
             assert "Error getting products: All products processing failed" in caplog.text
         
         # Verify that get_all_products was attempted and then fallback occurred
-        product_data_service.get_all_products.assert_called_once_with(12)
+        mock_get_all_products.assert_called_once_with(12)
         product_data_service.local_service.get_products.assert_called_once_with(12)
 
     @pytest.mark.asyncio
-    async def test_get_products_default_limit(self, product_data_service):
+    async def test_get_products_default_limit(self, product_data_service, mocker):
         """Test get_products uses default limit when no filters are specified."""
         expected_products = [{"id": "default", "name": "Default Limit Product"}]
-        product_data_service.local_service.get_products.return_value = expected_products
+        # Patch the internal method to control return value and verify arguments
+        mock_get_all_products = mocker.patch.object(
+            product_data_service, 'get_all_products', return_value=expected_products
+        )
         
         products = await product_data_service.get_products() # No limit specified
         assert products == expected_products
-        product_data_service.local_service.get_products.assert_called_once_with(20) # Default limit is 20
-    
+        mock_get_all_products.assert_called_once_with(20) # Default limit is 20
+        # Ensure other paths are not taken
+        product_data_service.local_service.search_products.assert_not_called()
+        product_data_service.local_service.get_products_by_category.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_get_products_exception_in_fallback(self, product_data_service, mock_run_in_executor, caplog):
         """
@@ -317,7 +364,7 @@ class TestProductDataService:
         leading to the exception propagating.
         """
         # Simulate the category path (get_products_by_category) raising an exception
-        mocker.patch.object(product_data_service, 'get_products_by_category', side_effect=Exception("Category path failed"))
+        mock_get_products_by_category = mocker.patch.object(product_data_service, 'get_products_by_category', side_effect=Exception("Category path failed"))
 
         # Simulate the fallback call (local_service.get_products) also raising an exception
         product_data_service.local_service.get_products.side_effect = Exception("Fallback local service failed")
@@ -330,7 +377,7 @@ class TestProductDataService:
             assert "Error getting products: Category path failed" in caplog.text
         
         # Verify both underlying calls were made
-        product_data_service.get_products_by_category.assert_called_once_with("double_fail_cat", 7)
+        mock_get_products_by_category.assert_called_once_with("double_fail_cat", 7)
         product_data_service.local_service.get_products.assert_called_once_with(7)
 
     @pytest.mark.asyncio
@@ -340,7 +387,7 @@ class TestProductDataService:
         leading to the exception propagating.
         """
         # Simulate the no-filters path (get_all_products) raising an exception
-        mocker.patch.object(product_data_service, 'get_all_products', side_effect=Exception("All products path failed"))
+        mock_get_all_products = mocker.patch.object(product_data_service, 'get_all_products', side_effect=Exception("All products path failed"))
 
         # Simulate the fallback call (local_service.get_products) also raising an exception
         product_data_service.local_service.get_products.side_effect = Exception("Fallback local service failed")
@@ -353,7 +400,7 @@ class TestProductDataService:
             assert "Error getting products: All products path failed" in caplog.text
         
         # Verify both underlying calls were made
-        product_data_service.get_all_products.assert_called_once_with(12)
+        mock_get_all_products.assert_called_once_with(12)
         product_data_service.local_service.get_products.assert_called_once_with(12)
 
 
@@ -497,7 +544,7 @@ class TestProductDataService:
         
         products = product_data_service.get_products_by_category("electronics", limit=2)
         assert products == [{"id": "c1"}, {"id": "c2"}]
-        # local_service.get_products_by_category does not take limit directly
+        # local_service.get_products_by_category does not take limit directly, it's sliced by ProductDataService
         product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
 
     def test_get_products_by_category_default_limit(self, product_data_service):
@@ -688,7 +735,7 @@ class TestProductDataService:
         
         products = product_data_service.get_products_by_brand("brandx", limit=2)
         assert products == [{"id": "br1"}, {"id": "br2"}]
-        # local_service.get_products_by_brand does not take limit directly
+        # local_service.get_products_by_brand does not take limit directly, it's sliced by ProductDataService
         product_data_service.local_service.get_products_by_brand.assert_called_once_with("brandx")
 
     def test_get_products_by_brand_default_limit(self, product_data_service):

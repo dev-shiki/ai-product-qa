@@ -4,6 +4,7 @@ import os
 from pydantic import ValidationError
 from pathlib import Path
 import logging
+from functools import lru_cache # Import lru_cache to check its info
 
 # Define a comprehensive fixture to ensure a clean state for testing module-level imports
 # and cached functions.
@@ -454,6 +455,42 @@ class TestGetSettingsAndGlobal:
         # Ensure the cache prevented re-reading environment variables, even if they change.
         monkeypatch.setenv("GOOGLE_API_KEY", "changed-key-after-cache") # Change env var *after* first call
         assert second_call_settings.GOOGLE_API_KEY == "cache-test-key" # Still the original key, proving caching
+
+    def test_get_settings_cache_info(self, monkeypatch):
+        """
+        Tests the cache statistics (hits, misses, current size) of get_settings().
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "cache-info-key")
+
+        from app.utils.config import get_settings
+
+        # Ensure a clean slate for cache stats before starting this test
+        get_settings.cache_clear() 
+        info_before = get_settings.cache_info()
+        assert info_before.hits == 0
+        assert info_before.misses == 0
+        assert info_before.currsize == 0
+
+        # First call to get_settings: should be a cache miss
+        _ = get_settings()
+        info_after_first_call = get_settings.cache_info()
+        assert info_after_first_call.hits == 0
+        assert info_after_first_call.misses == 1
+        assert info_after_first_call.currsize == 1
+
+        # Second call to get_settings: should be a cache hit
+        _ = get_settings()
+        info_after_second_call = get_settings.cache_info()
+        assert info_after_second_call.hits == 1
+        assert info_after_second_call.misses == 1
+        assert info_after_second_call.currsize == 1
+
+        # Clear cache: should reset stats and size
+        get_settings.cache_clear()
+        info_after_clear = get_settings.cache_info()
+        assert info_after_clear.hits == 0
+        assert info_after_clear.misses == 0
+        assert info_after_clear.currsize == 0
 
     def test_global_settings_is_initialized_correctly(self, monkeypatch):
         """

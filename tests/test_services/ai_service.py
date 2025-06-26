@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch, AsyncMock
 import logging
 import sys
 import os
+import re
 
 # Adjusting sys.path to allow imports from the 'app' directory
 # This is crucial for pytest to find modules when running from the project root
@@ -10,6 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 
 from app.services.ai_service import AIService
 from app.utils.config import Settings # Assuming Settings class is defined in app.utils.config
+from app.services.product_data_service import ProductDataService # Import actual class for spec
 
 # --- Fixtures ---
 
@@ -50,7 +52,8 @@ def mock_genai_client():
 @pytest.fixture
 def mock_product_data_service():
     """Mocks the ProductDataService instance."""
-    mock_service = Mock()
+    # Use spec=ProductDataService to ensure the mock has the methods of the real class
+    mock_service = Mock(spec=ProductDataService)
     mock_service.smart_search_products = AsyncMock() # smart_search_products is an async method
     # Default return for product search: no products and a generic fallback
     mock_service.smart_search_products.return_value = ([], "No specific products found.")
