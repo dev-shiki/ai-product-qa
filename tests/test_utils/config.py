@@ -27,6 +27,7 @@ def clean_config_module():
     yield # Allow the test to run
 
     # Clean up again after the test, in case it re-imported the module
+    # or for subsequent tests in the same test run. This ensures isolation.
     if 'app.utils.config' in sys.modules:
         _config_module = sys.modules['app.utils.config']
         if hasattr(_config_module, 'get_settings') and callable(getattr(_config_module.get_settings, 'cache_clear', None)):
@@ -116,6 +117,7 @@ class TestSettings:
     def test_settings_init_raises_error_on_missing_google_api_key(self, monkeypatch, caplog):
         """
         Tests that Settings raises ValueError and logs an error when GOOGLE_API_KEY is missing.
+        This covers the 'not self.GOOGLE_API_KEY' part when the variable is entirely absent.
         """
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False) # Ensure it's unset
 
@@ -131,6 +133,7 @@ class TestSettings:
     def test_settings_init_raises_error_on_placeholder_google_api_key(self, monkeypatch, caplog):
         """
         Tests that Settings raises ValueError and logs an error when GOOGLE_API_KEY is the default placeholder.
+        This covers the 'self.GOOGLE_API_KEY == "your-google-api-key-here"' part.
         """
         monkeypatch.setenv("GOOGLE_API_KEY", "your-google-api-key-here")
 
@@ -142,6 +145,38 @@ class TestSettings:
         assert "GOOGLE_API_KEY must be set in .env file" in str(excinfo.value)
         assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text
         assert caplog.records[0].levelname == "ERROR"
+
+    def test_settings_init_raises_error_on_empty_string_google_api_key_kwarg(self, caplog):
+        """
+        Tests that Settings raises ValueError and logs an error when GOOGLE_API_KEY
+        is provided as an empty string directly via kwargs.
+        Pydantic allows empty strings for `str` type, but our custom __init__ checks this
+        via the 'not self.GOOGLE_API_KEY' condition.
+        """
+        with caplog.at_level('ERROR'):
+            with pytest.raises(ValueError) as excinfo:
+                from app.utils.config import Settings
+                Settings(GOOGLE_API_KEY="")
+
+        assert "GOOGLE_API_KEY must be set in .env file" in str(excinfo.value)
+        assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text
+        assert caplog.records[0].levelname == "ERROR"
+
+    def test_settings_init_raises_validation_error_on_none_google_api_key_kwarg(self):
+        """
+        Tests that Settings raises Pydantic ValidationError when GOOGLE_API_KEY
+        is provided as None directly via kwargs, as it's a non-optional string field.
+        This validates Pydantic's behavior *before* our custom __init__ check.
+        """
+        with pytest.raises(ValidationError) as excinfo:
+            from app.utils.config import Settings
+            # Mypy will complain about `None` for `str` type, but we're testing Pydantic's behavior.
+            Settings(GOOGLE_API_KEY=None) # type: ignore 
+
+        assert "GOOGLE_API_KEY" in str(excinfo.value)
+        # Check for typical Pydantic v1 or v2 error messages
+        assert any(msg in str(excinfo.value) for msg in ["value is not a valid string", "Input should be a valid string"])
+
 
     def test_settings_init_fails_on_invalid_port_type(self, monkeypatch):
         """
@@ -172,6 +207,50 @@ class TestSettings:
         
         assert "DEBUG" in str(excinfo.value)
         assert "value could not be parsed to a boolean" in str(excinfo.value)
+
+    def test_settings_init_success_debug_from_string_true(self, monkeypatch):
+        """
+        Tests that DEBUG field correctly parses string "true" (case-insensitive) to boolean True.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "valid-key")
+        monkeypatch.setenv("DEBUG", "true")
+
+        from app.utils.config import Settings
+        settings = Settings()
+        assert settings.DEBUG is True
+
+    def test_settings_init_success_debug_from_string_false(self, monkeypatch):
+        """
+        Tests that DEBUG field correctly parses string "false" (case-insensitive) to boolean False.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "valid-key")
+        monkeypatch.setenv("DEBUG", "false")
+
+        from app.utils.config import Settings
+        settings = Settings()
+        assert settings.DEBUG is False
+
+    def test_settings_init_success_debug_from_string_one(self, monkeypatch):
+        """
+        Tests that DEBUG field correctly parses string "1" to boolean True.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "valid-key")
+        monkeypatch.setenv("DEBUG", "1")
+
+        from app.utils.config import Settings
+        settings = Settings()
+        assert settings.DEBUG is True
+
+    def test_settings_init_success_debug_from_string_zero(self, monkeypatch):
+        """
+        Tests that DEBUG field correctly parses string "0" to boolean False.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "valid-key")
+        monkeypatch.setenv("DEBUG", "0")
+
+        from app.utils.config import Settings
+        settings = Settings()
+        assert settings.DEBUG is False
 
 
 # Test cases for the get_settings function and the global settings object
@@ -212,7 +291,7 @@ class TestGetSettingsAndGlobal:
         # Verify that both calls return the exact same object instance
         assert first_call_settings is second_call_settings
         assert first_call_settings.GOOGLE_API_KEY == "cache-test-key"
-        # Ensure the cache prevented re-reading environment variables
+        # Ensure the cache prevented re-reading environment variables, even if they change.
         monkeypatch.setenv("GOOGLE_API_KEY", "changed-key")
         assert second_call_settings.GOOGLE_API_KEY == "cache-test-key" # Still the original key
 
@@ -234,7 +313,7 @@ class TestGetSettingsAndGlobal:
     def test_global_settings_fails_on_missing_key_at_import(self, monkeypatch, caplog):
         """
         Tests that importing the config module fails if GOOGLE_API_KEY is missing,
-        due to the global 'settings' initialization.
+        due to the global 'settings' initialization, and logs an error.
         """
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False) # Ensure it's unset
 
@@ -251,7 +330,7 @@ class TestGetSettingsAndGlobal:
     def test_global_settings_fails_on_placeholder_key_at_import(self, monkeypatch, caplog):
         """
         Tests that importing the config module fails if GOOGLE_API_KEY is the placeholder,
-        due to the global 'settings' initialization.
+        due to the global 'settings' initialization, and logs an error.
         """
         monkeypatch.setenv("GOOGLE_API_KEY", "your-google-api-key-here")
 
@@ -267,7 +346,7 @@ class TestGetSettingsAndGlobal:
     def test_get_settings_cache_clear_functionality(self, monkeypatch):
         """
         Tests that get_settings.cache_clear() correctly clears the cached instance,
-        allowing a new instance to be created on the next call.
+        allowing a new instance to be created on the next call, reflecting updated env vars.
         """
         monkeypatch.setenv("GOOGLE_API_KEY", "first-key")
         
@@ -282,7 +361,7 @@ class TestGetSettingsAndGlobal:
         # Change the environment variable
         monkeypatch.setenv("GOOGLE_API_KEY", "second-key")
         
-        # Get settings again - should now pick up the new env var
+        # Get settings again - should now pick up the new env var as cache was cleared
         second_settings = get_settings()
 
         # Verify that it's a new instance and has the new API key

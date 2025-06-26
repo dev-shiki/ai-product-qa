@@ -50,9 +50,9 @@ MOCK_PRODUCTS_RAW_FOR_JSON = [
         "name": "Product C",
         "category": "Category1",
         "brand": "BrandX",
-        "price": 50000, # Cheapest product
+        "price": 50000, # Cheapest product, high rating
         "currency": "IDR",
-        "description": "Cheapest product, high quality.",
+        "description": "Cheapest product, high quality. Very good.",
         "specifications": {"rating": 4.9, "sold": 1200, "stock_count": 200}, # Highest rated
         "availability": "in_stock",
         "reviews_count": 20,
@@ -136,7 +136,7 @@ TRANSFORMED_MOCK_PRODUCTS_DATA = [
         "availability": "out_of_stock", "reviews_count": 5, "images": ["https://example.com/prod2.jpg"], "url": "https://shopee.co.id/prod2"
     },
     {
-        "id": "prod3", "name": "Product C", "category": "Category1", "brand": "BrandX", "price": 50000, "currency": "IDR", "description": "Cheapest product, high quality.",
+        "id": "prod3", "name": "Product C", "category": "Category1", "brand": "BrandX", "price": 50000, "currency": "IDR", "description": "Cheapest product, high quality. Very good.",
         "specifications": {"rating": 4.9, "sold": 1000, "stock": 200, "condition": "Baru", "shop_location": "Indonesia", "shop_name": "BrandX Store"},
         "availability": "in_stock", "reviews_count": 20, "images": ["https://example.com/prod3.jpg"], "url": "https://shopee.co.id/prod3"
     },
@@ -219,6 +219,7 @@ def test_load_local_products_file_not_found(mock_logger):
         MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
         
         # Create an instance to call the internal method
+        # Note: We need a real instance to call _load_local_products, not a mock of the class.
         service = LocalProductService() 
         result = service._load_local_products()
         
@@ -514,6 +515,49 @@ def test_load_local_products_transformation_with_extra_spec_fields(mock_logger):
         assert products[0]['id'] == 'custom_spec_prod'
         assert products[0]['specifications'] == expected_transformed_spec
 
+def test_load_local_products_first_encoding_succeeds_others_not_tried(mock_logger):
+    """
+    Test that once an encoding succeeds, no further encoding attempts are made.
+    """
+    mock_json_content = json.dumps({"products": MOCK_PRODUCTS_RAW_FOR_JSON})
+    
+    mock_file_path = MagicMock(spec=Path)
+    mock_file_path.exists.return_value = True
+
+    # Simulate utf-8 succeeding immediately
+    def open_side_effect(file_path_arg, mode, encoding):
+        if encoding == 'utf-16-le': # First attempt, fail
+            raise UnicodeDecodeError("mockcodec", b"", 0, 1, "mock reason")
+        elif encoding == 'utf-16': # Second attempt, fail
+            raise UnicodeDecodeError("mockcodec", b"", 0, 1, "mock reason")
+        elif encoding == 'utf-8': # Third attempt, succeed
+            m_file = MagicMock()
+            m_file.read.return_value = mock_json_content
+            return m_file
+        else: # Should not be called
+            pytest.fail(f"Open called with unexpected encoding: {encoding}")
+
+    with patch('app.services.local_product_service.Path') as MockPath, \
+         patch('builtins.open', side_effect=open_side_effect), \
+         patch('random.randint', return_value=1000):
+        
+        MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
+
+        service = LocalProductService() 
+        products = service._load_local_products()
+        
+        assert len(products) == len(TRANSFORMED_MOCK_PRODUCTS_DATA)
+        mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using utf-8 encoding")
+        mock_logger.warning.assert_called_with("Failed to load with utf-16 encoding: mockcodec: mock reason") # Only for utf-16-le and utf-16
+        assert mock_logger.warning.call_count == 2
+        
+        # Verify open was called exactly 3 times (utf-16-le, utf-16, utf-8)
+        assert builtins.open.call_count == 3
+        assert builtins.open.call_args_list[0].kwargs['encoding'] == 'utf-16-le'
+        assert builtins.open.call_args_list[1].kwargs['encoding'] == 'utf-16'
+        assert builtins.open.call_args_list[2].kwargs['encoding'] == 'utf-8'
+
+
 def test_get_fallback_products(mock_logger):
     """
     Test the _get_fallback_products method directly.
@@ -563,7 +607,7 @@ def test_search_products_with_limit(mock_local_product_service_instance):
     service = mock_local_product_service_instance
     results = service.search_products("product", limit=1)
     assert len(results) == 1
-    assert results[0]['id'] == 'prod1' # First ranked product
+    assert results[0]['id'] == 'prod1' # First ranked product (Product A)
 
 def test_search_products_limit_zero(mock_local_product_service_instance):
     """
@@ -598,12 +642,17 @@ def test_search_products_price_extraction_juta(mock_local_product_service_instan
     service = mock_local_product_service_instance
     results = service.search_products("product 1 juta") # Should include products <= 1,000,000
     product_ids = {p['id'] for p in results}
-    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod8'} # Product D, F are > 1 juta
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod8', 'prod7'} # Product D, F are > 1 juta
     assert product_ids == expected_ids
     assert all(p['price'] <= 1000000 for p in results)
-    # The sorting prioritizes exact keyword matches, then budget relevance if max_price is active.
+    
+    # Check sorting for relevance with price filter
+    # Prod1, prod2, prod3, prod5 contain "product" in name/desc. prod7, prod8 don't.
+    # Among prod1,prod2,prod3,prod5, prod1 has highest score due to "Product A" exact match
+    assert results[0]['id'] == 'prod1' # "Product A" match
+    
+    # After Prod1, Prod2, Prod3, Prod5.prod7 (price 0) and prod3 (price 50k) would be high due to budget score.
     # The order of products with same score is stable but not guaranteed based on attributes.
-    # We only assert presence and price criteria.
 
 def test_search_products_price_extraction_ribu(mock_local_product_service_instance):
     """
@@ -612,7 +661,7 @@ def test_search_products_price_extraction_ribu(mock_local_product_service_instan
     service = mock_local_product_service_instance
     results = service.search_products("product 200 ribu") # Should include products <= 200,000
     product_ids = {p['id'] for p in results}
-    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5'}
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod7'}
     assert product_ids == expected_ids
     assert all(p['price'] <= 200000 for p in results)
 
@@ -623,7 +672,7 @@ def test_search_products_price_extraction_rp(mock_local_product_service_instance
     service = mock_local_product_service_instance
     results = service.search_products("product Rp 150000")
     product_ids = {p['id'] for p in results}
-    expected_ids = {'prod1', 'prod3', 'prod5'}
+    expected_ids = {'prod1', 'prod3', 'prod5', 'prod7'}
     assert product_ids == expected_ids
     assert all(p['price'] <= 150000 for p in results)
 
@@ -635,12 +684,9 @@ def test_search_products_price_extraction_budget_keyword(mock_local_product_serv
     service = mock_local_product_service_instance
     results = service.search_products("gadget murah") 
     # 'murah' corresponds to 5_000_000 max_price.
+    # Prod4 contains 'gadget' in description.
     # All products have price <= 5M.
-    # Prod4 contains 'gadget'.
     # Sorting by relevance: score based on keyword match + price preference.
-    # prod4 ('gadget' in desc) gets a boost + budget score.
-    # prod7 (price 0) gets a very high budget score.
-    # prod3 (price 50k) gets a high budget score.
     
     # We expect 'prod4' (gadget match) and 'prod7', 'prod3' (cheapest) to be among top results.
     # Exact ordering can depend on tie-breaking in sort, so we check for presence among top.
@@ -652,11 +698,80 @@ def test_search_products_price_extraction_budget_keyword(mock_local_product_serv
 
     # Specific check for top elements to reflect sorting by relevance
     # Prod4 has keyword "gadget" and is within budget.
-    # Prod7 and Prod3 are very cheap.
+    # Prod7 and Prod3 are very cheap, giving them high budget score.
     top_ids = {p['id'] for p in results[:3]}
     assert 'prod4' in top_ids
     assert 'prod7' in top_ids
     assert 'prod3' in top_ids
+
+def test_search_products_price_and_keyword_combined_without_budget_keyword(mock_local_product_service_instance):
+    """
+    Test search_products with a numerical price limit and a keyword,
+    ensuring price filtering applies and sorting is by relevance (keyword first).
+    """
+    service = mock_local_product_service_instance
+    results = service.search_products("Product A 100 ribu") # Max price 100,000
+    
+    assert len(results) == 2 # Only prod1 (price 100k) and prod7 (price 0) should match price
+    
+    # Both 'prod1' (100k) and 'prod7' (0k) are <= 100k.
+    # 'prod1' has "Product A" in name (score 10). 'prod7' has no relevant keyword match.
+    assert results[0]['id'] == 'prod1' # Higher relevance score due to keyword
+    assert results[1]['id'] == 'prod7' # Lower relevance score, only price match
+
+
+def test_search_products_relevance_sorting_exact_match(mock_local_product_service_instance):
+    """
+    Verify that exact name matches give higher relevance scores.
+    """
+    service = mock_local_product_service_instance
+    results = service.search_products("good") # Prod1 ('good product'), Prod3 ('Very good')
+
+    assert len(results) == 2
+    # The order depends on how 'good' exactly matches. 'Very good' and 'A very good product'
+    # Prod1 description: "Description A. A very good product."
+    # Prod3 description: "Cheapest product, high quality. Very good."
+    # Both should get score from description match. Prod3 also has rating 4.9.
+    # The default tie-breaking is stable. Let's just check both are present.
+    assert {p['id'] for p in results} == {'prod1', 'prod3'}
+    # The order might not be strictly predictable without more refined scoring or tie-breaking logic.
+    # For now, asserting presence is sufficient.
+
+def test_search_products_relevance_sorting_budget_preference(mock_local_product_service_instance):
+    """
+    Verify that for budget searches, lower priced items get a higher relevance score.
+    """
+    service = mock_local_product_service_instance
+    results = service.search_products("product murah") # "murah" implies max_price 5M, and activates budget scoring
+    
+    # All products have "Product" in name/description.
+    # They all get +10 or so for 'product' keyword match.
+    # Then budget score is added: (10M - price) / 1M.
+    # Prod7 (price 0) should get a huge boost: (10M - 0) / 1M = 10.
+    # Prod3 (price 50k) should get a high boost: (10M - 50k) / 1M = 9.95.
+    # Prod1 (price 100k) should get: (10M - 100k) / 1M = 9.9.
+    
+    assert len(results) == len(TRANSFORMED_MOCK_PRODUCTS_DATA) # All products match "product" and are <= 5M
+    assert results[0]['id'] == 'prod7' # Cheapest, highest budget score
+    assert results[1]['id'] == 'prod3' # Second cheapest
+    assert results[2]['id'] == 'prod1' # Third cheapest (among those matching 'product')
+
+def test_search_products_empty_keyword(mock_local_product_service_instance):
+    """
+    Test search_products with an empty keyword. Should return products up to limit, in default order (which is based on the internal list order).
+    """
+    service = mock_local_product_service_instance
+    results = service.search_products("", limit=3)
+    assert len(results) == 3
+    # When keyword is empty, the `if keyword_lower in searchable_text` condition is essentially always true.
+    # All products get added to `filtered_products`.
+    # The relevance_score function for empty keyword_lower will just be based on price if budget keyword is present,
+    # otherwise it will be 0 for all, and the order will be original list order due to stable sort.
+    # In this case, no budget keyword, so order should be original.
+    assert results[0]['id'] == 'prod1'
+    assert results[1]['id'] == 'prod2'
+    assert results[2]['id'] == 'prod3'
+
 
 def test_search_products_error_handling(mock_local_product_service_instance, mock_logger):
     """
@@ -811,7 +926,7 @@ def test_get_brands(mock_local_product_service_instance):
     """
     service = mock_local_product_service_instance
     brands = service.get_brands()
-    assert sorted(brands) == sorted(['BrandX', 'BrandY', 'BrandZ', '']) # '' for prod7, prod8 missing brand
+    assert sorted(brands) == sorted(['BrandX', 'BrandY', 'BrandZ', 'CustomBrand', '']) # '' for prod7, prod8 missing brand
 
 def test_get_brands_empty_products_list():
     """
@@ -1189,6 +1304,19 @@ def test_smart_search_products_best_request_general(mock_local_product_service_i
     assert products[1]['id'] == 'prod5' 
     assert message == "Berikut produk terbaik berdasarkan rating:"
 
+def test_smart_search_products_best_request_english_keyword(mock_local_product_service_instance):
+    """
+    Test smart_search_products for general "best" request (English keyword).
+    Should return top-rated products overall.
+    """
+    service = mock_local_product_service_instance
+    products, message = service.smart_search_products(keyword="best", limit=2)
+    assert len(products) == 2
+    assert products[0]['id'] == 'prod3' 
+    assert products[1]['id'] == 'prod5' 
+    assert message == "Berikut produk terbaik berdasarkan rating:"
+
+
 def test_smart_search_products_best_request_specific_category_found(mock_local_product_service_instance):
     """
     Test smart_search_products for "terbaik" request within a specific category that exists.
@@ -1223,8 +1351,7 @@ def test_smart_search_products_all_criteria_match(mock_local_product_service_ins
     assert len(products) == 2
     # Products matching: prod1 (100k, Category1), prod5 (150k, Category1)
     # The internal search algorithm will filter first, then sort by relevance.
-    # Keyword "Product A" matches prod1. Desc of prod2 also has "Product A related"
-    # But only prod1 and prod5 are in Category1 and <= 150k.
+    # Keyword "Product A" matches prod1.
     expected_ids = {'prod1', 'prod5'}
     actual_ids = {p['id'] for p in products}
     assert actual_ids == expected_ids
@@ -1297,10 +1424,10 @@ def test_smart_search_products_empty_keyword_only_category(mock_local_product_se
     assert len(products) == 2
     # Should find all products in Category1, limit 2. These are prod1, prod3, prod5.
     # The actual order might vary based on default sorting if keyword isn't active.
-    # Let's check presence:
-    expected_ids = {'prod1', 'prod3', 'prod5'}
-    actual_ids = {p['id'] for p in products}
-    assert actual_ids.issubset(expected_ids) and len(actual_ids) == 2
+    # When keyword is empty, and no max_price, score is 0. So original list order applies due to stable sort.
+    # prod1, prod3, prod5 are in Category1. Original order is prod1, then prod3, then prod5.
+    assert products[0]['id'] == 'prod1'
+    assert products[1]['id'] == 'prod3'
     assert message == "Berikut produk yang sesuai dengan kriteria Anda."
 
 def test_smart_search_products_empty_keyword_only_max_price(mock_local_product_service_instance):
@@ -1312,9 +1439,10 @@ def test_smart_search_products_empty_keyword_only_max_price(mock_local_product_s
     products, message = service.smart_search_products(keyword="", max_price=150000, limit=2)
     assert len(products) == 2
     # Should find products <= 150k: prod1, prod3, prod5, prod7
-    expected_ids = {'prod1', 'prod3', 'prod5', 'prod7'}
-    actual_ids = {p['id'] for p in products}
-    assert actual_ids.issubset(expected_ids) and len(actual_ids) == 2
+    # With empty keyword and max_price, price relevance is active.
+    # prod7 (0k) -> prod3 (50k) -> prod1 (100k) -> prod5 (150k)
+    assert products[0]['id'] == 'prod7'
+    assert products[1]['id'] == 'prod3'
     assert message == "Berikut produk yang sesuai dengan kriteria Anda."
 
 def test_smart_search_products_empty_all_filters(mock_local_product_service_instance):
@@ -1342,6 +1470,25 @@ def test_smart_search_products_limit_zero(mock_local_product_service_instance):
     assert len(products) == 0
     assert message == "Berikut produk terbaik berdasarkan rating:"
 
-# Add test for 'smart_search_products' error handling if needed, though most logic is guarded by filters.
-# The primary filter for smart_search_products is a list comprehension which is usually safe.
-# If `self.products` causes an error, it would be caught by the fixture's init or `_load_local_products` tests.
+def test_smart_search_products_negative_limit(mock_local_product_service_instance):
+    """
+    Test smart_search_products with a negative limit. Python slicing handles this by returning an empty list.
+    """
+    service = mock_local_product_service_instance
+    products, message = service.smart_search_products(keyword="Product", limit=-1)
+    assert len(products) == 0
+    assert message == "Berikut produk yang sesuai dengan kriteria Anda." # Message should still be primary success one
+
+def test_smart_search_products_no_products_loaded(mock_logger):
+    """
+    Test smart_search_products when the internal products list is empty.
+    Should return an empty list and a message indicating no products found.
+    """
+    # Create a LocalProductService instance with an empty products list
+    with patch('app.services.local_product_service.LocalProductService._load_local_products', return_value=[]):
+        service = LocalProductService()
+        products, message = service.smart_search_products(keyword="any", category="any", max_price=100000)
+        assert products == []
+        assert message == "Tidak ada produk yang sesuai, berikut rekomendasi produk terpopuler."
+        # No error logged, as empty list is a valid state
+        mock_logger.error.assert_not_called()

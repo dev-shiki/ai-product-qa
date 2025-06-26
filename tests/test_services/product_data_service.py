@@ -10,8 +10,9 @@ PRODUCT_DATA_SERVICE_MODULE = 'app.services.product_data_service'
 # This helps ensure that methods called on the mock exist on the real object,
 # preventing silent errors from typos in method names.
 class MockLocalProductServiceSpec:
+    """Specification for mocking LocalProductService methods."""
     def search_products(self, keyword: str, limit: int = 10): pass
-    def get_products(self, limit: int = 20): pass # This method takes limit
+    def get_products(self, limit: int = 20): pass
     def get_categories(self) -> list: pass
     def get_top_rated_products(self, limit: int = 10) -> list: pass
     def get_best_selling_products(self, limit: int = 10) -> list: pass
@@ -85,6 +86,7 @@ def mock_run_in_executor(mocker):
 # --- Test Cases for ProductDataService ---
 
 class TestProductDataService:
+    """Comprehensive test suite for ProductDataService."""
 
     @pytest.mark.asyncio
     async def test_init(self, mock_local_service, caplog):
@@ -134,6 +136,18 @@ class TestProductDataService:
         
         product_data_service.local_service.search_products.assert_called_once_with("error_case", 10)
 
+    @pytest.mark.asyncio
+    async def test_search_products_zero_limit(self, product_data_service, mock_run_in_executor, caplog):
+        """Test search_products with limit=0 returns an empty list."""
+        mock_run_in_executor.return_value = [] # The underlying service should return 0 items for limit 0
+
+        with caplog.at_level(logging.INFO):
+            products = await product_data_service.search_products("any", limit=0)
+            assert products == []
+            assert "Found 0 products for keyword: any" in caplog.text
+        
+        product_data_service.local_service.search_products.assert_called_once_with("any", 0)
+
 
     @pytest.mark.asyncio
     async def test_get_products_with_search(self, product_data_service, mock_run_in_executor):
@@ -171,6 +185,18 @@ class TestProductDataService:
         assert products == expected_products
         # local_service's method is called by the ProductDataService's internal method
         product_data_service.local_service.get_products.assert_called_once_with(15)
+
+    @pytest.mark.asyncio
+    async def test_get_products_search_precedence(self, product_data_service, mock_run_in_executor):
+        """Test get_products prioritizes 'search' over 'category' if both are provided."""
+        expected_products = [{"id": "s_prec", "name": "Search Precedence"}]
+        product_data_service.local_service.search_products.return_value = expected_products
+        mock_run_in_executor.return_value = expected_products
+
+        products = await product_data_service.get_products(search="query", category="ignored", limit=5)
+        assert products == expected_products
+        product_data_service.local_service.search_products.assert_called_once_with("query", 5)
+        product_data_service.local_service.get_products_by_category.assert_not_called() # Ensure category path was not taken
 
     @pytest.mark.asyncio
     async def test_get_products_exception_fallback(self, product_data_service, mock_run_in_executor, caplog):
@@ -235,6 +261,16 @@ class TestProductDataService:
         product_data_service.get_all_products.assert_called_once_with(12)
         product_data_service.local_service.get_products.assert_called_once_with(12)
 
+    @pytest.mark.asyncio
+    async def test_get_products_default_limit(self, product_data_service):
+        """Test get_products uses default limit when no filters are specified."""
+        expected_products = [{"id": "default", "name": "Default Limit Product"}]
+        product_data_service.local_service.get_products.return_value = expected_products
+        
+        products = await product_data_service.get_products() # No limit specified
+        assert products == expected_products
+        product_data_service.local_service.get_products.assert_called_once_with(20) # Default limit is 20
+
 
     @pytest.mark.asyncio
     async def test_get_categories_success(self, product_data_service):
@@ -244,6 +280,15 @@ class TestProductDataService:
         
         categories = await product_data_service.get_categories()
         assert categories == expected_categories
+        product_data_service.local_service.get_categories.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_categories_empty(self, product_data_service):
+        """Test get_categories returns an empty list when no categories are available."""
+        product_data_service.local_service.get_categories.return_value = []
+        
+        categories = await product_data_service.get_categories()
+        assert categories == []
         product_data_service.local_service.get_categories.assert_called_once()
 
     @pytest.mark.asyncio
@@ -270,6 +315,22 @@ class TestProductDataService:
         product_data_service.local_service.get_top_rated_products.assert_called_once_with(2)
 
     @pytest.mark.asyncio
+    async def test_get_top_rated_products_empty(self, product_data_service):
+        """Test get_top_rated_products returns empty list when no products are found."""
+        product_data_service.local_service.get_top_rated_products.return_value = []
+        products = await product_data_service.get_top_rated_products(limit=5)
+        assert products == []
+        product_data_service.local_service.get_top_rated_products.assert_called_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_get_top_rated_products_zero_limit(self, product_data_service):
+        """Test get_top_rated_products with limit=0 returns empty list."""
+        product_data_service.local_service.get_top_rated_products.return_value = [] # The underlying service should return 0 for limit 0
+        products = await product_data_service.get_top_rated_products(limit=0)
+        assert products == []
+        product_data_service.local_service.get_top_rated_products.assert_called_once_with(0)
+
+    @pytest.mark.asyncio
     async def test_get_top_rated_products_exception(self, product_data_service, caplog):
         """Test get_top_rated_products handles exceptions gracefully."""
         product_data_service.local_service.get_top_rated_products.side_effect = Exception("Top rated service error")
@@ -291,6 +352,22 @@ class TestProductDataService:
         products = await product_data_service.get_best_selling_products(limit=3)
         assert products == expected_products
         product_data_service.local_service.get_best_selling_products.assert_called_once_with(3)
+
+    @pytest.mark.asyncio
+    async def test_get_best_selling_products_empty(self, product_data_service):
+        """Test get_best_selling_products returns empty list when no products are found."""
+        product_data_service.local_service.get_best_selling_products.return_value = []
+        products = await product_data_service.get_best_selling_products(limit=5)
+        assert products == []
+        product_data_service.local_service.get_best_selling_products.assert_called_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_get_best_selling_products_zero_limit(self, product_data_service):
+        """Test get_best_selling_products with limit=0 returns empty list."""
+        product_data_service.local_service.get_best_selling_products.return_value = [] # The underlying service should return 0 for limit 0
+        products = await product_data_service.get_best_selling_products(limit=0)
+        assert products == []
+        product_data_service.local_service.get_best_selling_products.assert_called_once_with(0)
 
     @pytest.mark.asyncio
     async def test_get_best_selling_products_exception(self, product_data_service, caplog):
@@ -316,6 +393,24 @@ class TestProductDataService:
         # local_service.get_products_by_category does not take limit directly
         product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
 
+    def test_get_products_by_category_limit_exceeds_available(self, product_data_service):
+        """Test get_products_by_category returns all available products if limit exceeds them."""
+        all_cat_products = [{"id": "c1"}, {"id": "c2"}]
+        product_data_service.local_service.get_products_by_category.return_value = all_cat_products
+        
+        products = product_data_service.get_products_by_category("electronics", limit=10) # Limit is 10, but only 2 available
+        assert products == all_cat_products
+        product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
+
+    def test_get_products_by_category_zero_limit(self, product_data_service):
+        """Test get_products_by_category with limit=0 returns an empty list."""
+        product_data_service.local_service.get_products_by_category.return_value = [{"id": "c1"}] # Even if products exist
+        
+        products = product_data_service.get_products_by_category("electronics", limit=0)
+        assert products == []
+        product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
+
+
     def test_get_products_by_category_no_results(self, product_data_service):
         """Test get_products_by_category returns empty list if no results."""
         product_data_service.local_service.get_products_by_category.return_value = []
@@ -339,24 +434,21 @@ class TestProductDataService:
     def test_get_all_products_success(self, product_data_service):
         """Test get_all_products returns products and passes limit to local service."""
         # local_service.get_products takes limit directly
-        all_products = [{"id": "a1"}, {"id": "a2"}, {"id": "a3"}]
-        product_data_service.local_service.get_products.return_value = all_products
+        expected_products_for_limit = [{"id": "a1"}, {"id": "a2"}]
+        product_data_service.local_service.get_products.return_value = expected_products_for_limit
         
         products = product_data_service.get_all_products(limit=2)
-        # Note: The service's get_all_products calls local_service.get_products(limit).
-        # It does NOT apply slicing *after* that call, so if local_service.get_products
-        # returns more than 'limit', this test needs to reflect that behavior.
-        # The current mock returns exactly `all_products` for `get_products`,
-        # so the assertion should be `all_products[:limit]` if the LocalProductService
-        # itself doesn't guarantee the limit. However, the mock spec implies
-        # local_service.get_products takes the limit and should respect it.
-        # So, if mock returns 3 but limit is 2, the mock should actually return 2.
-        # Let's adjust mock_lps.get_products return value to reflect the limit properly.
-        product_data_service.local_service.get_products.return_value = all_products[:2] # Explicitly mock what the underlying service would return given the limit
-        
-        products = product_data_service.get_all_products(limit=2)
-        assert products == all_products[:2]
+        assert products == expected_products_for_limit
         product_data_service.local_service.get_products.assert_called_once_with(2)
+
+    def test_get_all_products_default_limit(self, product_data_service):
+        """Test get_all_products uses default limit."""
+        expected_products = [{"id": "a1", "name": "Default All Product"}]
+        product_data_service.local_service.get_products.return_value = expected_products
+        
+        products = product_data_service.get_all_products() # No limit specified
+        assert products == expected_products
+        product_data_service.local_service.get_products.assert_called_once_with(20) # Default limit is 20
 
     def test_get_all_products_no_results(self, product_data_service):
         """Test get_all_products returns empty list if no results."""
@@ -365,6 +457,14 @@ class TestProductDataService:
         products = product_data_service.get_all_products()
         assert products == []
         product_data_service.local_service.get_products.assert_called_once_with(20)
+
+    def test_get_all_products_zero_limit(self, product_data_service):
+        """Test get_all_products with limit=0 returns empty list."""
+        product_data_service.local_service.get_products.return_value = [] # Underlying service would return 0 for limit 0
+        products = product_data_service.get_all_products(limit=0)
+        assert products == []
+        product_data_service.local_service.get_products.assert_called_once_with(0)
+
 
     def test_get_all_products_exception(self, product_data_service, caplog):
         """Test get_all_products handles exceptions gracefully."""
@@ -416,6 +516,14 @@ class TestProductDataService:
         assert brands == expected_brands
         product_data_service.local_service.get_brands.assert_called_once()
 
+    def test_get_brands_empty(self, product_data_service):
+        """Test get_brands returns empty list when no brands are available."""
+        product_data_service.local_service.get_brands.return_value = []
+        
+        brands = product_data_service.get_brands()
+        assert brands == []
+        product_data_service.local_service.get_brands.assert_called_once()
+
     def test_get_brands_exception(self, product_data_service, caplog):
         """Test get_brands handles exceptions gracefully."""
         product_data_service.local_service.get_brands.side_effect = Exception("Brand service error")
@@ -436,6 +544,23 @@ class TestProductDataService:
         products = product_data_service.get_products_by_brand("brandx", limit=2)
         assert products == [{"id": "br1"}, {"id": "br2"}]
         # local_service.get_products_by_brand does not take limit directly
+        product_data_service.local_service.get_products_by_brand.assert_called_once_with("brandx")
+
+    def test_get_products_by_brand_limit_exceeds_available(self, product_data_service):
+        """Test get_products_by_brand returns all available products if limit exceeds them."""
+        all_brand_products = [{"id": "br1"}, {"id": "br2"}]
+        product_data_service.local_service.get_products_by_brand.return_value = all_brand_products
+        
+        products = product_data_service.get_products_by_brand("brandx", limit=10)
+        assert products == all_brand_products
+        product_data_service.local_service.get_products_by_brand.assert_called_once_with("brandx")
+
+    def test_get_products_by_brand_zero_limit(self, product_data_service):
+        """Test get_products_by_brand with limit=0 returns an empty list."""
+        product_data_service.local_service.get_products_by_brand.return_value = [{"id": "br1"}] # Even if products exist
+        
+        products = product_data_service.get_products_by_brand("brandx", limit=0)
+        assert products == []
         product_data_service.local_service.get_products_by_brand.assert_called_once_with("brandx")
 
     def test_get_products_by_brand_no_results(self, product_data_service):
@@ -492,6 +617,20 @@ class TestProductDataService:
         product_data_service.local_service.smart_search_products.assert_called_once_with(
             '', None, None, 5
         )
+    
+    @pytest.mark.asyncio
+    async def test_smart_search_products_zero_limit(self, product_data_service, mock_run_in_executor):
+        """Test smart_search_products with limit=0."""
+        expected_products = []
+        expected_message = "No results due to limit 0."
+        mock_run_executor_result = (expected_products, expected_message)
+        mock_run_in_executor.return_value = mock_run_executor_result
+
+        products, message = await product_data_service.smart_search_products(limit=0)
+        assert products == expected_products
+        assert message == expected_message
+        product_data_service.local_service.smart_search_products.assert_called_once_with('', None, None, 0)
+
 
     @pytest.mark.asyncio
     async def test_smart_search_products_exception(self, product_data_service, mock_run_in_executor):
