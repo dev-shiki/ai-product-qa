@@ -3,7 +3,7 @@ name: 🤖 Auto Commit - Test Coverage Improvement
 on:
   schedule:
     # Run every 15 minutes
-    - cron: '*/15 * * * *'
+    - cron: '*/30 * * * *'
   
   # Manual trigger
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
   # Run on push to main branch - WITH PROTECTION against infinite loop
   push:
     branches:
-      - main
+      - master
     paths-ignore:
       - '**.md'
       - '.github/workflows/auto-commit.yml'
