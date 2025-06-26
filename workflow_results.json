@@ -1,0 +1,35 @@
+{
+  "timestamp": "2025-06-26T13:31:05.402182",
+  "overall_success": true,
+  "steps": [
+    {
+      "script": ".github\\scripts\\coverage_analyzer.py",
+      "description": "Coverage Analysis",
+      "success": true,
+      "duration": 14.411191940307617,
+      "stdout": "\n=== COVERAGE ANALYSIS SUMMARY ===\nTotal files analyzed: 17\n\nLowest coverage files:\n  app/services/ai_service.py: 32.3%\n  app/services/product_data_service.py: 35.4%\n  app/services/local_product_service.py: 82.4%\n",
+      "stderr": "2025-06-26 13:30:45,757 - INFO - Starting coverage analysis...\n2025-06-26 13:30:45,757 - INFO - Running tests with coverage...\n2025-06-26 13:30:45,757 - INFO - Running coverage command: coverage run --source=app -m pytest tests -v\n2025-06-26 13:30:58,778 - INFO - Generating coverage report...\n2025-06-26 13:30:59,312 - INFO - Coverage report generated successfully\n2025-06-26 13:30:59,312 - INFO - Report output:\nName                                    Stmts   Miss  Cover   Missing\n---------------------------------------------------------------------\napp\\api\\__init__.py                         0      0   100%\napp\\api\\products.py                        73     73     0%   1-101\napp\\api\\queries.py                        120    120     0%   1-213\napp\\main.py                                14     14     0%   1-29\napp\\models\\__init__.py                      0      0   100%\napp\\models\\product.py                      39      0   100%\napp\\services\\__init__.py                    0      0   100%\napp\\services\\ai_service.py                 62     42    32%   18-20, 24-92, 115-117\napp\\services\\local_product_service.py     182     32    82%   73-83, 342-344, 384-386, 397-399, 432-434, 449-451, 464-466, 479-481, 488-490\napp\\services\\product_data_service.py       82     53    35%   19-29, 33-42, 46-50, 54-58, 62-66, 72-74, 80-82, 88-90, 96-98, 104-106, 113-118\napp\\utils\\__init__.py                       0      0   100%\napp\\utils\\config.py                        22      0   100%\n---------------------------------------------------------------------\nTOTAL                                     594    334    44%\n\n2025-06-26 13:30:59,312 - INFO - Generating XML coverage report...\n2025-06-26 13:30:59,770 - INFO - Coverage XML generated successfully\n2025-06-26 13:30:59,771 - INFO - XML file created: coverage.xml\n2025-06-26 13:30:59,817 - INFO - Parsed coverage for 17 files\n2025-06-26 13:30:59,817 - INFO - Found 3 Python files with low coverage (< 100%)\n2025-06-26 13:30:59,818 - INFO - Analysis complete. Found 3 files with low coverage\n2025-06-26 13:30:59,819 - INFO - Coverage report saved to coverage_report.json\n"
+    },
+    {
+      "script": ".github\\scripts\\test_generator.py",
+      "description": "Test Generation with Gemini",
+      "success": false,
+      "duration": 1.7077844142913818,
+      "stdout": "",
+      "stderr": "2025-06-26 13:31:01,367 - ERROR - Test generation failed: GEMINI_API_KEY not found in environment variables\n",
+      "error": "2025-06-26 13:31:01,367 - ERROR - Test generation failed: GEMINI_API_KEY not found in environment variables\n"
+    },
+    {
+      "script": ".github\\scripts\\auto_commit.py",
+      "description": "Auto Commit",
+      "success": true,
+      "duration": 3.8437352180480957,
+      "stdout": "\n[SUCCESS] Auto commit successful!\nMessage: Auto-commit: Update test coverage - Update 1 config files | Update 1 other files - 2025-06-26 13:31:01\nFiles changed: 2\n",
+      "stderr": "2025-06-26 13:31:01,707 - INFO - Starting auto commit process...\n2025-06-26 13:31:01,707 - INFO - Running git command: git status --porcelain\n2025-06-26 13:31:01,793 - INFO - Found 2 changes to commit\n2025-06-26 13:31:01,793 - INFO - Running git command: git add .\n2025-06-26 13:31:01,948 - INFO - Running git command: git commit -m Auto-commit: Update test coverage - Update 1 config files | Update 1 other files - 2025-06-26 13:31:01\n2025-06-26 13:31:02,383 - INFO - Committed: Auto-commit: Update test coverage - Update 1 config files | Update 1 other files - 2025-06-26 13:31:01\n2025-06-26 13:31:02,383 - INFO - Running git command: git branch --show-current\n2025-06-26 13:31:02,383 - INFO - Running git command: git push origin master\n2025-06-26 13:31:05,387 - INFO - Pushed to origin/master\n2025-06-26 13:31:05,387 - INFO - Auto commit result saved to auto_commit_result.json\n"
+    }
+  ],
+  "errors": [
+    "2025-06-26 13:31:01,367 - ERROR - Test generation failed: GEMINI_API_KEY not found in environment variables\n"
+  ],
+  "duration": 46.346529483795166
+}
