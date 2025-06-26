@@ -286,6 +286,66 @@ Return ONLY the complete test code without any explanations or markdown formatti
             logger.error(f"Error processing coverage report: {e}")
             return {"error": str(e)}
 
+    def generate_tests(self, files: List[str], coverage_data: Dict) -> List[Dict]:
+        """Generate one focused test function for the first uncovered function in each file, save as flat test file."""
+        results = []
+        for filepath in files:
+            module_name = Path(filepath).stem
+            uncovered_funcs = self.get_uncovered_functions(filepath, coverage_data)
+            if not uncovered_funcs:
+                logger.info(f"No uncovered functions found in {filepath}, skipping.")
+                continue
+            target_func = uncovered_funcs[0]
+            logger.info(f"Generating test for {filepath} function {target_func}")
+
+            # Prompt: only one test function, focus, must be simple
+            prompt = (
+                f"Buatkan satu fungsi unit test pytest untuk fungsi '{target_func}' di file '{filepath}'. "
+                f"Test harus sederhana, tidak perlu mock berlebihan, dan cukup satu test function saja. "
+                f"Output hanya kode fungsi test-nya saja (tanpa import, tanpa class, tanpa file penuh)."
+            )
+            test_func_code = self.generate_test_with_gemini(prompt, filepath)
+            if not test_func_code:
+                logger.error(f"Failed to generate test for {filepath}::{target_func}")
+                results.append({"file": filepath, "function": target_func, "success": False, "error": "No test generated"})
+                continue
+
+            # Save to flat test file with versioning
+            test_file_path = self.get_next_test_file_path(module_name)
+            with open(test_file_path, "w", encoding="utf-8") as f:
+                # Add import pytest and import target module
+                f.write(f"import pytest\n")
+                import_path = filepath.replace("/", ".").replace(".py", "")
+                f.write(f"from app.{import_path} import {target_func}\n\n")
+                f.write(test_func_code.strip() + "\n")
+            logger.info(f"Saved test for {filepath}::{target_func} to {test_file_path}")
+            results.append({"file": filepath, "function": target_func, "success": True, "test_file": str(test_file_path)})
+        return results
+
+    def get_uncovered_functions(self, filepath: str, coverage_data: Dict) -> List[str]:
+        """Return list of function names in the file that are not covered (dummy: return first function if any)."""
+        # TODO: Replace with real coverage analysis per function if available
+        # For now, just return all top-level function names
+        import ast
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            return [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
+        except Exception as e:
+            logger.error(f"Error parsing {filepath}: {e}")
+            return []
+
+    def get_next_test_file_path(self, module_name: str) -> Path:
+        """Get next available test file path in tests/ with versioning."""
+        tests_dir = Path("tests")
+        base = f"test_{module_name}.py"
+        path = tests_dir / base
+        version = 2
+        while path.exists():
+            path = tests_dir / f"test_{module_name}_v{version}.py"
+            version += 1
+        return path
+
 def main():
     """Main function"""
     try:
