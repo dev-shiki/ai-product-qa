@@ -1,0 +1,37 @@
+{
+  "timestamp": "2025-06-26T12:14:28.121742",
+  "steps": [
+    {
+      "script": "coverage_analyzer.py",
+      "description": "Coverage Analysis",
+      "success": true,
+      "duration": 13.039571285247803,
+      "stdout": "\n=== COVERAGE ANALYSIS SUMMARY ===\nTotal files analyzed: 17\n\nLowest coverage files:\n",
+      "stderr": "2025-06-26 12:14:28,500 - INFO - Starting coverage analysis...\n2025-06-26 12:14:28,500 - INFO - Running tests with coverage...\n2025-06-26 12:14:28,500 - INFO - Running coverage command: coverage run --source=app -m pytest tests -v\n2025-06-26 12:14:40,224 - INFO - Generating coverage report...\n2025-06-26 12:14:40,818 - INFO - Coverage report generated successfully\n2025-06-26 12:14:40,818 - INFO - Report output:\nName                                    Stmts   Miss  Cover   Missing\n---------------------------------------------------------------------\napp\\api\\__init__.py                         0      0   100%\napp\\api\\products.py                        73     73     0%   1-101\napp\\api\\queries.py                        120    120     0%   1-213\napp\\main.py                                14     14     0%   1-29\napp\\models\\__init__.py                      0      0   100%\napp\\models\\product.py                      39      0   100%\napp\\services\\__init__.py                    0      0   100%\napp\\services\\ai_service.py                 62     42    32%   18-20, 24-92, 115-117\napp\\services\\local_product_service.py     182     32    82%   73-83, 342-344, 384-386, 397-399, 432-434, 449-451, 464-466, 479-481, 488-490\napp\\services\\product_data_service.py       82     53    35%   19-29, 33-42, 46-50, 54-58, 62-66, 72-74, 80-82, 88-90, 96-98, 104-106, 113-118\napp\\utils\\__init__.py                       0      0   100%\napp\\utils\\config.py                        22      0   100%\n---------------------------------------------------------------------\nTOTAL                                     594    334    44%\n\n2025-06-26 12:14:40,818 - INFO - Generating XML coverage report...\n2025-06-26 12:14:41,325 - INFO - Coverage XML generated successfully\n2025-06-26 12:14:41,325 - INFO - XML file created: coverage.xml\n2025-06-26 12:14:41,344 - INFO - Parsed coverage for 17 files\n2025-06-26 12:14:41,344 - INFO - Found 0 Python files with coverage data\n2025-06-26 12:14:41,344 - INFO - Analysis complete. Found 0 files with low coverage\n2025-06-26 12:14:41,345 - INFO - Coverage report saved to coverage_report.json\n",
+      "returncode": 0
+    },
+    {
+      "script": "test_generator.py",
+      "description": "Test Generation with Gemini",
+      "success": false,
+      "skipped": true,
+      "reason": "No coverage data available",
+      "duration": 0
+    },
+    {
+      "script": "auto_commit.py",
+      "description": "Auto Commit",
+      "success": false,
+      "duration": 5.109966039657593,
+      "stdout": "",
+      "stderr": "2025-06-26 12:14:41,654 - INFO - Starting auto commit process...\n2025-06-26 12:14:41,654 - INFO - Running git command: git status --porcelain\n2025-06-26 12:14:41,718 - INFO - Found 3 changes to commit\n2025-06-26 12:14:41,718 - INFO - Running git command: git add .\n2025-06-26 12:14:41,884 - INFO - Running git command: git commit -m \\U0001f916 Auto-commit: Update test coverage - Update 1 config files | Update 2 other files - 2025-06-26 12:14:41\n2025-06-26 12:14:42,197 - INFO - Running git command: git branch --show-current\n2025-06-26 12:14:42,241 - INFO - Running git command: git push origin master\n2025-06-26 12:14:46,577 - INFO - Auto commit result saved to auto_commit_result.json\n2025-06-26 12:14:46,578 - ERROR - Auto commit failed: 'charmap' codec can't encode character '\\u2705' in position 2: character maps to <undefined>\n",
+      "returncode": 1,
+      "error": "2025-06-26 12:14:41,654 - INFO - Starting auto commit process...\n2025-06-26 12:14:41,654 - INFO - Running git command: git status --porcelain\n2025-06-26 12:14:41,718 - INFO - Found 3 changes to commit\n2025-06-26 12:14:41,718 - INFO - Running git command: git add .\n2025-06-26 12:14:41,884 - INFO - Running git command: git commit -m \\U0001f916 Auto-commit: Update test coverage - Update 1 config files | Update 2 other files - 2025-06-26 12:14:41\n2025-06-26 12:14:42,197 - INFO - Running git command: git branch --show-current\n2025-06-26 12:14:42,241 - INFO - Running git command: git push origin master\n2025-06-26 12:14:46,577 - INFO - Auto commit result saved to auto_commit_result.json\n2025-06-26 12:14:46,578 - ERROR - Auto commit failed: 'charmap' codec can't encode character '\\u2705' in position 2: character maps to <undefined>\n"
+    }
+  ],
+  "overall_success": true,
+  "errors": [
+    "Test generation skipped: No coverage data available",
+    "Auto commit failed: 2025-06-26 12:14:41,654 - INFO - Starting auto commit process...\n2025-06-26 12:14:41,654 - INFO - Running git command: git status --porcelain\n2025-06-26 12:14:41,718 - INFO - Found 3 changes to commit\n2025-06-26 12:14:41,718 - INFO - Running git command: git add .\n2025-06-26 12:14:41,884 - INFO - Running git command: git commit -m \\U0001f916 Auto-commit: Update test coverage - Update 1 config files | Update 2 other files - 2025-06-26 12:14:41\n2025-06-26 12:14:42,197 - INFO - Running git command: git branch --show-current\n2025-06-26 12:14:42,241 - INFO - Running git command: git push origin master\n2025-06-26 12:14:46,577 - INFO - Auto commit result saved to auto_commit_result.json\n2025-06-26 12:14:46,578 - ERROR - Auto commit failed: 'charmap' codec can't encode character '\\u2705' in position 2: character maps to <undefined>\n"
+  ]
+}

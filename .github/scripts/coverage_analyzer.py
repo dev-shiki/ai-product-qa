@@ -170,14 +170,31 @@ class CoverageAnalyzer:
         if not coverage_data:
             return []
             
-        # Filter hanya file Python dan sort berdasarkan coverage
-        python_files = [(f, c) for f, c in coverage_data.items() 
-                       if f.endswith('.py') and ('app/' in f or f.startswith('app/'))]
+        # Filter hanya file Python dengan path yang benar dan coverage < 100%
+        python_files = []
+        for filepath, coverage in coverage_data.items():
+            # Skip directories and non-Python files
+            if not filepath.endswith('.py'):
+                continue
+                
+            # Convert relative paths to app/ format
+            if filepath.startswith('app/'):
+                normalized_path = filepath
+            elif '/' in filepath or '\\' in filepath:
+                # Handle paths like "api/products.py" -> "app/api/products.py"
+                normalized_path = f"app/{filepath}"
+            else:
+                # Handle single file names like "main.py" -> "app/main.py"
+                normalized_path = f"app/{filepath}"
+            
+            # Only include files with coverage < 100% and > 0%
+            if 0 < coverage < 100:
+                python_files.append((normalized_path, coverage))
         
-        # Sort by coverage (ascending)
+        # Sort by coverage (ascending - lowest first)
         sorted_files = sorted(python_files, key=lambda x: x[1])
         
-        logger.info(f"Found {len(sorted_files)} Python files with coverage data")
+        logger.info(f"Found {len(sorted_files)} Python files with low coverage (< 100%)")
         
         return sorted_files[:limit]
     
