@@ -175,14 +175,25 @@ Return ONLY the complete test code without any explanations or markdown formatti
     def run_generated_test(self, filepath: str) -> Dict:
         """Run generated test dan return result"""
         try:
-            relative_path = filepath.replace('app/', '')
-            test_file = f"tests/test_{relative_path}"
-            
-            if not Path(test_file).exists():
-                return {"success": False, "error": "Test file not found"}
-            
+            # Ambil nama file python asli tanpa path
+            base_name = Path(filepath).name  # e.g. ai_service.py
+            test_base = f"test_{base_name}"
+            test_file_path = Path("tests") / test_base
+
+            # Cari file test yang sudah dibuat (termasuk versi)
+            version = 2
+            while not test_file_path.exists():
+                stem = Path(test_base).stem  # test_ai_service
+                suffix = Path(test_base).suffix  # .py
+                test_file_path = Path("tests") / f"{stem}_v{version}{suffix}"
+                version += 1
+                
+                # Jika sudah cek sampai v10 dan tidak ketemu, berarti file tidak ada
+                if version > 10:
+                    return {"success": False, "error": "Test file not found"}
+
             # Run the specific test file
-            cmd = ["python", "-m", "pytest", test_file, "-v", "--tb=short"]
+            cmd = ["python", "-m", "pytest", str(test_file_path), "-v", "--tb=short"]
             
             logger.info(f"Running test: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
