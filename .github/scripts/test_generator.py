@@ -128,22 +128,27 @@ Return ONLY the complete test code without any explanations or markdown formatti
         return None
     
     def save_test_file(self, filepath: str, test_code: str) -> bool:
-        """Save test code ke file"""
+        """Save test code ke file (selalu di root tests/, penamaan unik, tidak overwrite)"""
         try:
-            # Convert app/file.py to tests/test_file.py
-            relative_path = filepath.replace('app/', '')
-            test_file_path = Path("tests") / f"test_{relative_path}"
-            
-            # Create directory if it doesn't exist
-            test_file_path.parent.mkdir(parents=True, exist_ok=True)
-            
+            # Ambil nama file python asli tanpa path
+            base_name = Path(filepath).name  # e.g. ai_service.py
+            test_base = f"test_{base_name}"
+            test_file_path = Path("tests") / test_base
+
+            # Jika sudah ada, tambahkan versi _v2, _v3, dst
+            version = 2
+            while test_file_path.exists():
+                stem = Path(test_base).stem  # test_ai_service
+                suffix = Path(test_base).suffix  # .py
+                test_file_path = Path("tests") / f"{stem}_v{version}{suffix}"
+                version += 1
+
             # Write test file
             with open(test_file_path, 'w', encoding='utf-8') as f:
                 f.write(test_code)
             
             logger.info(f"Test file saved: {test_file_path}")
             return True
-            
         except Exception as e:
             logger.error(f"Error saving test file: {e}")
             return False
