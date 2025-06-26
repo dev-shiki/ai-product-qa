@@ -11,7 +11,12 @@ import builtins # Added for patching open
 # Add the parent directory of 'app' to the sys.path
 # This allows imports like 'from app.services.local_product_service import LocalProductService'
 # to work correctly when tests are run from a different root.
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Assuming the test file is at 'project_root/app/test_services/test_local_product_service.py'
+# and the source file is at 'project_root/app/services/local_product_service.py'.
+# The sys.path adjustment should point to 'project_root'.
+current_file_path = Path(__file__).resolve()
+project_root = current_file_path.parent.parent.parent # Navigate up from app/test_services/test_local_product_service.py to project_root
+sys.path.insert(0, str(project_root))
 
 from app.services.local_product_service import LocalProductService
 
@@ -276,13 +281,14 @@ def test_load_local_products_valid_json_utf16le_with_bom(mock_logger):
             # This simulates reading a file that *was* UTF-16-LE with BOM,
             # and `file.read()` returns the decoded string (which still has the BOM char at start).
             m_file.read.return_value = '\ufeff' + mock_json_content_str
+            return m_file
         elif encoding == 'utf-16': # Make it fail so utf-16-le is tested
             raise UnicodeDecodeError("mockcodec", b"", 0, 1, "mock reason for utf-16")
         else:
             # For other encodings, return content that will cause JSONDecodeError
             # (they shouldn't be reached if utf-16-le succeeds)
             m_file.read.return_value = "invalid json" # This branch implies an issue if it's hit.
-        return m_file
+            return m_file # Needs to return a mock file even if content is bad.
 
     with patch('app.services.local_product_service.Path') as MockPath, \
          patch('builtins.open', side_effect=open_side_effect), \

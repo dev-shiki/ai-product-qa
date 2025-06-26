@@ -461,6 +461,17 @@ class TestProductDataService:
         # local_service.get_products_by_category does not take limit directly
         product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
 
+    def test_get_products_by_category_default_limit(self, product_data_service):
+        """Test get_products_by_category uses default limit if not specified."""
+        all_cat_products = [{"id": f"c{i}"} for i in range(15)] # More than default limit 10
+        product_data_service.local_service.get_products_by_category.return_value = all_cat_products
+        
+        products = product_data_service.get_products_by_category("electronics") # No limit specified
+        assert len(products) == 10
+        assert products == all_cat_products[:10]
+        product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
+
+
     def test_get_products_by_category_limit_exceeds_available(self, product_data_service):
         """Test get_products_by_category returns all available products if limit exceeds them."""
         all_cat_products = [{"id": "c1"}, {"id": "c2"}]
@@ -614,6 +625,16 @@ class TestProductDataService:
         # local_service.get_products_by_brand does not take limit directly
         product_data_service.local_service.get_products_by_brand.assert_called_once_with("brandx")
 
+    def test_get_products_by_brand_default_limit(self, product_data_service):
+        """Test get_products_by_brand uses default limit if not specified."""
+        all_brand_products = [{"id": f"br{i}"} for i in range(15)] # More than default limit 10
+        product_data_service.local_service.get_products_by_brand.return_value = all_brand_products
+        
+        products = product_data_service.get_products_by_brand("brandx") # No limit specified
+        assert len(products) == 10
+        assert products == all_brand_products[:10]
+        product_data_service.local_service.get_products_by_brand.assert_called_once_with("brandx")
+
     def test_get_products_by_brand_limit_exceeds_available(self, product_data_service):
         """Test get_products_by_brand returns all available products if limit exceeds them."""
         all_brand_products = [{"id": "br1"}, {"id": "br2"}]
@@ -686,6 +707,31 @@ class TestProductDataService:
             '', None, None, 5
         )
     
+    @pytest.mark.asyncio
+    async def test_smart_search_products_with_only_keyword(self, product_data_service, mock_run_in_executor):
+        """Test smart_search_products with only keyword specified."""
+        expected_products = [{"id": "k1", "name": "Keyword Item"}]
+        expected_message = "Keyword search done."
+        mock_run_in_executor.return_value = (expected_products, expected_message)
+
+        products, message = await product_data_service.smart_search_products(keyword="test_keyword", limit=1)
+        assert products == expected_products
+        assert message == expected_message
+        product_data_service.local_service.smart_search_products.assert_called_once_with("test_keyword", None, None, 1)
+
+    @pytest.mark.asyncio
+    async def test_smart_search_products_with_only_category(self, product_data_service, mock_run_in_executor):
+        """Test smart_search_products with only category specified."""
+        expected_products = [{"id": "c1", "name": "Category Item"}]
+        expected_message = "Category search done."
+        mock_run_in_executor.return_value = (expected_products, expected_message)
+
+        products, message = await product_data_service.smart_search_products(category="electronics", limit=2)
+        assert products == expected_products
+        assert message == expected_message
+        product_data_service.local_service.smart_search_products.assert_called_once_with('', "electronics", None, 2)
+
+
     @pytest.mark.asyncio
     async def test_smart_search_products_zero_limit(self, product_data_service, mock_run_in_executor):
         """Test smart_search_products with limit=0."""

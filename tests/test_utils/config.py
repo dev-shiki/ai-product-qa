@@ -4,6 +4,7 @@ import os
 from functools import lru_cache
 from pydantic import ValidationError
 from pathlib import Path
+import logging
 
 # Define a comprehensive fixture to ensure a clean state for testing module-level imports
 # and cached functions.
@@ -116,7 +117,7 @@ class TestSettings:
     def test_settings_init_with_direct_kwargs(self, monkeypatch):
         """
         Tests that Settings can be initialized by passing arguments directly,
-        which should override environment variables.
+        which should override environment variables and .env files.
         """
         # Set some environment variables that should be overridden by kwargs
         monkeypatch.setenv("GOOGLE_API_KEY", "env-key-should-be-overridden")
@@ -163,6 +164,38 @@ class TestSettings:
         assert settings.API_PORT == 9001
         assert settings.FRONTEND_HOST == "localhost" # Default, as not in .env or env vars
         assert settings.FRONTEND_PORT == 8501 # Default
+        assert settings.DEBUG is False
+
+    def test_settings_env_var_overrides_env_file(self, create_env_file, monkeypatch):
+        """
+        Tests that environment variables take precedence over values defined in a .env file.
+        """
+        env_file_content = """
+        GOOGLE_API_KEY=key_from_env_file
+        API_HOST=host_from_env_file
+        API_PORT=1000
+        FRONTEND_HOST=frontend_from_env_file
+        FRONTEND_PORT=1500
+        DEBUG=true
+        """
+        create_env_file.write_text(env_file_content.strip())
+
+        # Set environment variables with different values
+        monkeypatch.setenv("GOOGLE_API_KEY", "key_from_env_var")
+        monkeypatch.setenv("API_HOST", "host_from_env_var")
+        monkeypatch.setenv("API_PORT", "2000")
+        monkeypatch.setenv("FRONTEND_HOST", "frontend_from_env_var")
+        monkeypatch.setenv("FRONTEND_PORT", "2500")
+        monkeypatch.setenv("DEBUG", "false")
+        
+        from app.utils.config import Settings
+        settings = Settings()
+
+        assert settings.GOOGLE_API_KEY == "key_from_env_var"
+        assert settings.API_HOST == "host_from_env_var"
+        assert settings.API_PORT == 2000
+        assert settings.FRONTEND_HOST == "frontend_from_env_var"
+        assert settings.FRONTEND_PORT == 2500
         assert settings.DEBUG is False
 
     def test_settings_init_raises_error_on_missing_google_api_key(self, monkeypatch, caplog):

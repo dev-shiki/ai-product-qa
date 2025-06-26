@@ -41,7 +41,8 @@ def mock_genai_client():
     # Additionally, set a `.text` attribute directly on the AsyncMock instance itself.
     # This caters to the synchronous `generate_response` method which accesses `.text`
     # directly on the object returned by `generate_content` (since it's not awaited there).
-    mock_genai_method.text = "Mocked AI response text for sync access."
+    # This value can be overridden per test if needed for generate_response.
+    mock_genai_method.text = "Default Mocked AI response text for sync access."
 
     mock_client.models.generate_content = mock_genai_method
     return mock_client
@@ -356,7 +357,7 @@ async def test_get_response_product_context_missing_keys(ai_service_instance, mo
     assert "Brand: Unknown" in prompt
     assert "Category: Unknown" in prompt
     assert "Rating: 0/5" in prompt
-    assert "Description: A very basic product description...." in prompt # Default description truncation
+    assert "Description: A very basic product description..." in prompt # Default description truncation
 
     # Test for Product 2 (missing price, description, empty specifications/rating)
     assert "2. Product B" in prompt
@@ -372,7 +373,7 @@ async def test_get_response_product_context_missing_keys(ai_service_instance, mo
     assert "Brand: BrandC" in prompt
     assert "Category: laptop" in prompt
     assert "Rating: 0/5" in prompt # Default for rating if key is missing in specifications
-    assert "Description: Another product description...." in prompt
+    assert "Description: Another product description..." in prompt
 
 @pytest.mark.asyncio
 async def test_get_response_product_description_truncation_longer_than_200_chars(ai_service_instance, mock_product_data_service, mock_genai_client):
@@ -395,7 +396,7 @@ async def test_get_response_product_description_truncation_longer_than_200_chars
     expected_truncated_desc = long_description[:200] + "..."
     assert f"Description: {expected_truncated_desc}\n\n" in prompt
     assert long_description not in prompt # Ensure the full, untruncated description is not present
-    assert len(expected_truncated_desc) == 203
+    assert len(expected_truncated_desc) == 203 # 200 + 3 for "..."
 
 @pytest.mark.asyncio
 async def test_get_response_product_description_truncation_exact_200_chars(ai_service_instance, mock_product_data_service, mock_genai_client):
@@ -417,7 +418,7 @@ async def test_get_response_product_description_truncation_exact_200_chars(ai_se
 
     expected_output = exact_description + "..." # Source code always appends "..."
     assert f"Description: {expected_output}\n\n" in prompt
-    assert len(expected_output) == 203
+    assert len(expected_output) == 203 # 200 + 3 for "..."
 
 @pytest.mark.asyncio
 async def test_get_response_product_description_truncation_less_than_200_chars(ai_service_instance, mock_product_data_service, mock_genai_client):
