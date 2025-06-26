@@ -23,26 +23,21 @@ def mock_settings():
 def mock_genai_client():
     """
     Mocks the google.genai.Client instance.
-    The `generate_content` method is an AsyncMock, and its return value is
-    configured to have a `.text` attribute, which is common for AI API responses.
-    This setup works for both awaited (in get_response) and non-awaited (in generate_response)
-    calls, assuming that for non-awaited calls, the mock object itself is returned
-    and then `.text` is accessed on it.
+    The `generate_content` method is an AsyncMock for `get_response` (awaited)
+    and also configured to work for `generate_response` (not awaited).
     """
     mock_client = Mock()
     mock_client.models = Mock() # Ensure models attribute exists
     
-    # Configure the generate_content method to be an AsyncMock
-    # and its resolved return value (after await) or direct return value (if not awaited)
-    # to have a .text attribute.
+    # Configure the generate_content method to be an AsyncMock.
+    # The return_value will be the awaited result for AsyncMock.
     mock_generate_content_result = Mock()
-    mock_generate_content_result.text = "Mocked AI response text."
+    mock_generate_content_result.text = "Mocked AI response text for awaited call."
     
-    # The AsyncMock itself will be returned if not awaited. We need to ensure that the
-    # AsyncMock instance (the coroutine object) also has a `.text` attribute for the
+    # The AsyncMock instance itself needs a `.text` attribute for the
     # `generate_response` method, which does not await.
     mock_genai_method = AsyncMock(return_value=mock_generate_content_result)
-    mock_genai_method.text = "Mocked AI response text for sync access" # For the non-awaited call scenario
+    mock_genai_method.text = "Mocked AI response text for sync access."
 
     mock_client.models.generate_content = mock_genai_method
     return mock_client
@@ -81,9 +76,9 @@ def test_aiservice_init_success(ai_service_instance, mock_genai_client, mock_pro
         assert isinstance(ai_service_instance.product_service, Mock)
         assert ai_service_instance.product_service == mock_product_data_service
         assert "Successfully initialized AI service with Google AI client" in caplog.text
-    # Ensure client and product service are indeed the mocked objects
-    mock_genai_client.assert_called_once() # Client constructor should be called once
-    mock_product_data_service.assert_called_once() # ProductDataService constructor should be called once
+    # Ensure client and product service are indeed the mocked objects and their constructors were called
+    mock_genai_client.assert_called_once()
+    mock_product_data_service.assert_called_once()
 
 
 def test_aiservice_init_get_settings_failure(caplog):
@@ -108,6 +103,20 @@ def test_aiservice_init_genai_client_failure(mock_settings, caplog):
         with pytest.raises(Exception, match="Client init error"):
             AIService()
         assert "Error initializing AI service: Client init error" in caplog.text
+
+def test_aiservice_init_product_service_failure(mock_settings, mock_genai_client, caplog):
+    """
+    Tests AIService initialization failure when ProductDataService constructor
+    raises an exception. Ensures an exception is re-raised and an error log is created.
+    """
+    with patch('app.utils.config.get_settings', return_value=mock_settings), \
+         patch('google.genai.Client', return_value=mock_genai_client), \
+         patch('app.services.product_data_service.ProductDataService', side_effect=Exception("Product service init error")), \
+         caplog.at_level(logging.ERROR):
+        with pytest.raises(Exception, match="Product service init error"):
+            AIService()
+        assert "Error initializing AI service: Product service init error" in caplog.text
+
 
 # --- Tests for get_response method ---
 
@@ -196,6 +205,23 @@ async def test_get_response_ai_generation_failure(ai_service_instance, mock_gena
         assert "Error generating AI response: AI API error" in caplog.text
 
 @pytest.mark.asyncio
+async def test_get_response_product_data_service_failure(ai_service_instance, mock_product_data_service, caplog):
+    """
+    Tests get_response when the product data service fails.
+    Verifies that a friendly fallback message is returned and an error is logged.
+    """
+    question = "Cari laptop."
+    mock_product_data_service.smart_search_products.side_effect = Exception("Product service internal error")
+
+    with caplog.at_level(logging.ERROR):
+        response = await ai_service_instance.get_response(question)
+
+        assert response == "Maaf, saya sedang mengalami kesulitan untuk memberikan rekomendasi. Silakan coba lagi nanti."
+        mock_product_data_service.smart_search_products.assert_called_once()
+        assert "Error generating AI response: Product service internal error" in caplog.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "question, expected_category, expected_max_price",
     [
@@ -223,6 +249,13 @@ async def test_get_response_ai_generation_failure(ai_service_instance, mock_gena
         ("speaker bluetooth", "audio", None), # Test synonym
         ("ponsel android 4 juta", "smartphone", 4_000_000), # Combined
         ("smartwatch 1 juta", "jam", 1_000_000), # Combined
+        ("Produk", None, None), # Very general, no category or price
+        ("laptop budget", "laptop", 5_000_000), # Category + "budget"
+        ("Headphone murah banget", "headphone", 5_000_000), # Category + "murah"
+        ("Cari smartphone", "smartphone", None), # Just category
+        ("Harga 2 juta", None, 2_000_000), # Just price (no category)
+        ("Sebuah kamera", "kamera", None), # Basic category detection
+        ("TV", "tv", None), # Minimal category detection
     ]
 )
 async def test_get_response_category_and_price_detection(
@@ -260,6 +293,76 @@ async def test_get_response_empty_question(ai_service_instance, mock_product_dat
     assert "Question: \n\nNo specific products found, but I can provide general recommendations." in prompt
     assert "gemini-2.5-flash" in call_args[0]['model']
 
+@pytest.mark.asyncio
+async def test_get_response_product_context_missing_keys(ai_service_instance, mock_product_data_service, mock_genai_client):
+    """
+    Tests that product context building handles missing keys gracefully by using default values.
+    """
+    question = "Products with missing info"
+    mock_products = [
+        # Missing 'name', 'brand', 'category', 'specifications' (and thus rating)
+        {"price": 1000000, "description": "A very basic product description."},
+        # Missing 'price', 'description', has empty 'specifications'
+        {"name": "Product B", "brand": "BrandB", "category": "tablet", "specifications": {}},
+        # All fields present, but rating is missing within specifications
+        {"name": "Product C", "price": 5000000, "brand": "BrandC", "category": "laptop", "specifications": {"display": "13 inch"}, "description": "Another product description."},
+    ]
+    mock_fallback_message = "Some products with incomplete data."
+    mock_product_data_service.smart_search_products.return_value = (mock_products, mock_fallback_message)
+    mock_genai_client.models.generate_content.return_value.text = "Response about products with missing info."
+
+    response = await ai_service_instance.get_response(question)
+
+    assert response == "Response about products with missing info."
+    mock_genai_client.models.generate_content.assert_called_once()
+    call_args, _ = mock_genai_client.models.generate_content.call_args
+    prompt = call_args[0]['contents']
+
+    assert "1. Unknown" in prompt
+    assert "Price: Rp 1,000,000" in prompt
+    assert "Brand: Unknown" in prompt
+    assert "Category: Unknown" in prompt
+    assert "Rating: 0/5" in prompt
+    assert "Description: A very basic product description...." in prompt # Default description truncation
+
+    assert "2. Product B" in prompt
+    assert "Price: Rp 0" in prompt # Default for missing price
+    assert "Brand: BrandB" in prompt
+    assert "Category: tablet" in prompt
+    assert "Rating: 0/5" in prompt # Default for missing rating
+    assert "Description: No description..." in prompt # Default for missing description
+
+    assert "3. Product C" in prompt
+    assert "Price: Rp 5,000,000" in prompt
+    assert "Brand: BrandC" in prompt
+    assert "Category: laptop" in prompt
+    assert "Rating: 0/5" in prompt # Default for rating if key is missing in specifications
+    assert "Description: Another product description...." in prompt
+
+
+@pytest.mark.asyncio
+async def test_get_response_product_description_truncation(ai_service_instance, mock_product_data_service, mock_genai_client):
+    """
+    Tests that product descriptions are truncated to 200 characters with '...' correctly.
+    """
+    question = "Long description product"
+    long_description = "A" * 250
+    mock_products = [
+        {"name": "Product with Long Desc", "price": 100, "brand": "Test", "category": "test", "specifications": {"rating": 5}, "description": long_description},
+    ]
+    mock_product_data_service.smart_search_products.return_value = (mock_products, "Found one.")
+    mock_genai_client.models.generate_content.return_value.text = "Truncated description response."
+
+    await ai_service_instance.get_response(question)
+
+    call_args, _ = mock_genai_client.models.generate_content.call_args
+    prompt = call_args[0]['contents']
+
+    expected_truncated_desc = long_description[:200] + "..."
+    assert f"Description: {expected_truncated_desc}\n\n" in prompt
+    assert len(prompt) > 200 # Ensure the full prompt is still long
+    assert prompt.count("...") > 0 # Check for truncation ellipsis
+
 
 # --- Tests for generate_response method (legacy) ---
 
@@ -285,7 +388,11 @@ def test_generate_response_success(ai_service_instance, mock_genai_client, caplo
         mock_genai_client.models.generate_content.assert_called_once()
         call_args, _ = mock_genai_client.models.generate_content.call_args
         assert call_args[0]['model'] == "gemini-2.0-flash"
-        expected_prompt_part = f"""You are a helpful product assistant. Based on the following context:\n\n{context}\n\nPlease provide a clear and concise answer that helps the user understand the products and make an informed decision."""
+        expected_prompt_part = f"""You are a helpful product assistant. Based on the following context, provide a helpful and informative response:
+
+{context}
+
+Please provide a clear and concise answer that helps the user understand the products and make an informed decision."""
         assert expected_prompt_part in call_args[0]['contents']
         assert "Successfully generated AI response" in caplog.text
 

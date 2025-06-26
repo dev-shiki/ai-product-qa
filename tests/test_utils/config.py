@@ -3,6 +3,7 @@ import sys
 import os
 from functools import lru_cache
 from unittest.mock import patch
+from pydantic import ValidationError
 
 # Define a comprehensive fixture to ensure a clean state for testing module-level imports
 # and cached functions.
@@ -13,6 +14,9 @@ def clean_config_module():
     1. Clearing the lru_cache for get_settings if the module is already loaded.
     2. Removing the module from sys.modules to force a fresh import in subsequent tests.
     """
+    # Store initial sys.path for restoration
+    initial_sys_path = list(sys.path)
+
     # Ensure the module is not already loaded or clear its state if it is.
     if 'app.utils.config' in sys.modules:
         _config_module = sys.modules['app.utils.config']
@@ -28,6 +32,10 @@ def clean_config_module():
         if hasattr(_config_module, 'get_settings') and callable(getattr(_config_module.get_settings, 'cache_clear', None)):
             _config_module.get_settings.cache_clear()
         del sys.modules['app.utils.config']
+    
+    # Restore sys.path to its initial state to prevent test interference
+    sys.path = initial_sys_path
+
 
 # Test cases for the Settings class itself
 class TestSettings:
@@ -85,15 +93,36 @@ class TestSettings:
         assert settings.FRONTEND_PORT == 8501
         assert settings.DEBUG is True
 
+    def test_settings_init_with_direct_kwargs(self, monkeypatch):
+        """
+        Tests that Settings can be initialized by passing arguments directly,
+        which should override environment variables.
+        """
+        # Set some environment variables that should be overridden by kwargs
+        monkeypatch.setenv("GOOGLE_API_KEY", "env-key-should-be-overridden")
+        monkeypatch.setenv("API_PORT", "1234") # This should be overridden
+
+        from app.utils.config import Settings
+        
+        # Initialize with direct kwargs
+        settings = Settings(GOOGLE_API_KEY="direct-kwarg-key", API_PORT=9999)
+
+        assert settings.GOOGLE_API_KEY == "direct-kwarg-key"
+        assert settings.API_PORT == 9999
+        assert settings.API_HOST == "localhost" # Should fall back to default as not in env or kwargs
+        assert settings.FRONTEND_PORT == 8501 # Should fall back to default
+        assert settings.DEBUG is True # Should fall back to default
+
     def test_settings_init_raises_error_on_missing_google_api_key(self, monkeypatch, caplog):
         """
         Tests that Settings raises ValueError and logs an error when GOOGLE_API_KEY is missing.
         """
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False) # Ensure it's unset
 
-        with pytest.raises(ValueError) as excinfo:
-            from app.utils.config import Settings
-            Settings()
+        with caplog.at_level('ERROR'):
+            with pytest.raises(ValueError) as excinfo:
+                from app.utils.config import Settings
+                Settings()
 
         assert "GOOGLE_API_KEY must be set in .env file" in str(excinfo.value)
         assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text
@@ -105,13 +134,45 @@ class TestSettings:
         """
         monkeypatch.setenv("GOOGLE_API_KEY", "your-google-api-key-here")
 
-        with pytest.raises(ValueError) as excinfo:
-            from app.utils.config import Settings
-            Settings()
+        with caplog.at_level('ERROR'):
+            with pytest.raises(ValueError) as excinfo:
+                from app.utils.config import Settings
+                Settings()
 
         assert "GOOGLE_API_KEY must be set in .env file" in str(excinfo.value)
         assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text
         assert caplog.records[0].levelname == "ERROR"
+
+    def test_settings_init_fails_on_invalid_port_type(self, monkeypatch):
+        """
+        Tests that Settings raises a Pydantic ValidationError when API_PORT is not a valid integer.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "valid-key")
+        monkeypatch.setenv("API_PORT", "not_an_integer")
+
+        from app.utils.config import Settings
+
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+        
+        assert "API_PORT" in str(excinfo.value)
+        assert "value is not a valid integer" in str(excinfo.value)
+
+    def test_settings_init_fails_on_invalid_debug_type(self, monkeypatch):
+        """
+        Tests that Settings raises a Pydantic ValidationError when DEBUG is not a valid boolean.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "valid-key")
+        monkeypatch.setenv("DEBUG", "not_a_boolean")
+
+        from app.utils.config import Settings
+
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+        
+        assert "DEBUG" in str(excinfo.value)
+        assert "value could not be parsed to a boolean" in str(excinfo.value)
+
 
 # Test cases for the get_settings function and the global settings object
 class TestGetSettingsAndGlobal:
@@ -150,6 +211,10 @@ class TestGetSettingsAndGlobal:
         
         # Verify that both calls return the exact same object instance
         assert first_call_settings is second_call_settings
+        assert first_call_settings.GOOGLE_API_KEY == "cache-test-key"
+        # Ensure the cache prevented re-reading environment variables
+        monkeypatch.setenv("GOOGLE_API_KEY", "changed-key")
+        assert second_call_settings.GOOGLE_API_KEY == "cache-test-key" # Still the original key
 
     def test_global_settings_is_initialized_correctly(self, monkeypatch):
         """
@@ -173,10 +238,11 @@ class TestGetSettingsAndGlobal:
         """
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False) # Ensure it's unset
 
-        with pytest.raises(ValueError) as excinfo:
-            # This import statement will trigger the global settings initialization and thus the error
-            from app.utils import config 
-            _ = config # Avoid "unused import" warning if not explicitly used
+        with caplog.at_level('ERROR'):
+            with pytest.raises(ValueError) as excinfo:
+                # This import statement will trigger the global settings initialization and thus the error
+                from app.utils import config 
+                _ = config # Avoid "unused import" warning if not explicitly used
 
         assert "GOOGLE_API_KEY must be set in .env file" in str(excinfo.value)
         assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text
@@ -189,9 +255,10 @@ class TestGetSettingsAndGlobal:
         """
         monkeypatch.setenv("GOOGLE_API_KEY", "your-google-api-key-here")
 
-        with pytest.raises(ValueError) as excinfo:
-            from app.utils import config
-            _ = config
+        with caplog.at_level('ERROR'):
+            with pytest.raises(ValueError) as excinfo:
+                from app.utils import config
+                _ = config
 
         assert "GOOGLE_API_KEY must be set in .env file" in str(excinfo.value)
         assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text

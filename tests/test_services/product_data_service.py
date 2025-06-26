@@ -152,25 +152,29 @@ class TestProductDataService:
     async def test_get_products_with_category(self, product_data_service):
         """Test get_products dispatches to get_products_by_category when 'category' is present."""
         expected_products = [{"id": "c1", "name": "Category Item"}]
+        # This will be called by ProductDataService's get_products_by_category method, not directly by get_products
         product_data_service.local_service.get_products_by_category.return_value = expected_products
         
         products = await product_data_service.get_products(category="electronics", limit=10)
         assert products == expected_products
+        # local_service's method is called by the ProductDataService's internal method
         product_data_service.local_service.get_products_by_category.assert_called_once_with("electronics")
 
     @pytest.mark.asyncio
     async def test_get_products_no_filters(self, product_data_service):
         """Test get_products dispatches to get_all_products when no filters are present."""
         expected_products = [{"id": "a1", "name": "All Item"}]
+        # This will be called by ProductDataService's get_all_products method
         product_data_service.local_service.get_products.return_value = expected_products
         
         products = await product_data_service.get_products(limit=15)
         assert products == expected_products
+        # local_service's method is called by the ProductDataService's internal method
         product_data_service.local_service.get_products.assert_called_once_with(15)
 
     @pytest.mark.asyncio
     async def test_get_products_exception_fallback(self, product_data_service, mock_run_in_executor, caplog):
-        """Test get_products falls back to local_service.get_products on error in dispatch."""
+        """Test get_products falls back to local_service.get_products on error in 'search' dispatch."""
         # Simulate an error in the search path to trigger the fallback
         mock_run_in_executor.side_effect = Exception("Search path failed")
         
@@ -185,6 +189,51 @@ class TestProductDataService:
         
         # Verify fallback call
         product_data_service.local_service.get_products.assert_called_once_with(5)
+
+    @pytest.mark.asyncio
+    async def test_get_products_with_category_exception_fallback(self, product_data_service, mocker, caplog):
+        """
+        Test get_products falls back to local_service.get_products when
+        get_products_by_category (called internally) raises an exception.
+        """
+        # Patch the internal method get_products_by_category to raise an exception
+        mocker.patch.object(product_data_service, 'get_products_by_category', side_effect=Exception("Category processing failed"))
+        
+        # Configure fallback method's return value
+        fallback_products = [{"id": "fallback_cat", "name": "Fallback Category Product"}]
+        product_data_service.local_service.get_products.return_value = fallback_products
+
+        with caplog.at_level(logging.ERROR):
+            products = await product_data_service.get_products(category="error_cat", limit=7)
+            assert products == fallback_products
+            assert "Error getting products: Category processing failed" in caplog.text
+        
+        # Verify that get_products_by_category was attempted and then fallback occurred
+        product_data_service.get_products_by_category.assert_called_once_with("error_cat", 7)
+        product_data_service.local_service.get_products.assert_called_once_with(7)
+
+
+    @pytest.mark.asyncio
+    async def test_get_products_no_filters_exception_fallback(self, product_data_service, mocker, caplog):
+        """
+        Test get_products falls back to local_service.get_products when
+        get_all_products (called internally) raises an exception.
+        """
+        # Patch the internal method get_all_products to raise an exception
+        mocker.patch.object(product_data_service, 'get_all_products', side_effect=Exception("All products processing failed"))
+        
+        # Configure fallback method's return value
+        fallback_products = [{"id": "fallback_all", "name": "Fallback All Product"}]
+        product_data_service.local_service.get_products.return_value = fallback_products
+
+        with caplog.at_level(logging.ERROR):
+            products = await product_data_service.get_products(limit=12)
+            assert products == fallback_products
+            assert "Error getting products: All products processing failed" in caplog.text
+        
+        # Verify that get_all_products was attempted and then fallback occurred
+        product_data_service.get_all_products.assert_called_once_with(12)
+        product_data_service.local_service.get_products.assert_called_once_with(12)
 
 
     @pytest.mark.asyncio
@@ -294,7 +343,19 @@ class TestProductDataService:
         product_data_service.local_service.get_products.return_value = all_products
         
         products = product_data_service.get_all_products(limit=2)
-        assert products == all_products[:2] # ProductDataService itself might implicitly slice if local_service returns more
+        # Note: The service's get_all_products calls local_service.get_products(limit).
+        # It does NOT apply slicing *after* that call, so if local_service.get_products
+        # returns more than 'limit', this test needs to reflect that behavior.
+        # The current mock returns exactly `all_products` for `get_products`,
+        # so the assertion should be `all_products[:limit]` if the LocalProductService
+        # itself doesn't guarantee the limit. However, the mock spec implies
+        # local_service.get_products takes the limit and should respect it.
+        # So, if mock returns 3 but limit is 2, the mock should actually return 2.
+        # Let's adjust mock_lps.get_products return value to reflect the limit properly.
+        product_data_service.local_service.get_products.return_value = all_products[:2] # Explicitly mock what the underlying service would return given the limit
+        
+        products = product_data_service.get_all_products(limit=2)
+        assert products == all_products[:2]
         product_data_service.local_service.get_products.assert_called_once_with(2)
 
     def test_get_all_products_no_results(self, product_data_service):
