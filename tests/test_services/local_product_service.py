@@ -3,6 +3,7 @@ from unittest.mock import patch, mock_open, MagicMock, call
 import logging
 import json
 import random
+from typing import List, Dict
 from pathlib import Path
 import sys
 import builtins # Added for patching open
@@ -253,7 +254,8 @@ def test_load_local_products_valid_json_utf8(mock_logger):
         mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using utf-8 encoding")
         
         # Verify that open was called with utf-8 encoding (and potentially others if previous ones failed)
-        assert any(call.kwargs['encoding'] == 'utf-8' for call in builtins.open.call_args_list)
+        # It's important to check the *last* successful call's encoding.
+        assert builtins.open.call_args.kwargs['encoding'] == 'utf-8'
 
 def test_load_local_products_valid_json_utf16le_with_bom(mock_logger):
     """
@@ -265,17 +267,19 @@ def test_load_local_products_valid_json_utf16le_with_bom(mock_logger):
     mock_file_path = MagicMock(spec=Path)
     mock_file_path.exists.return_value = True
     
+    # Define a side_effect function for mock_open to control encoding attempts
+    # This simulates trying encodings in order and one succeeding.
     def open_side_effect(file_path_arg, mode, encoding):
         m_file = MagicMock()
         if encoding == 'utf-16-le':
             # This simulates reading a file that *was* UTF-16-LE with BOM,
             # and `file.read()` returns the decoded string (which still has the BOM char at start).
             m_file.read.return_value = '\ufeff' + mock_json_content_str
-        elif encoding == 'utf-16':
-            # Simulate a UnicodeDecodeError for utf-16 to ensure utf-16-le is tried first
+        elif encoding == 'utf-16': # Make it fail so utf-16-le is tested
             raise UnicodeDecodeError("mockcodec", b"", 0, 1, "mock reason for utf-16")
         else:
             # For other encodings, return content that will cause JSONDecodeError
+            # (they shouldn't be reached if utf-16-le succeeds)
             m_file.read.return_value = "invalid json"
         return m_file
 
@@ -291,10 +295,99 @@ def test_load_local_products_valid_json_utf16le_with_bom(mock_logger):
         assert len(products) == len(TRANSFORMED_MOCK_PRODUCTS_DATA)
         assert products == TRANSFORMED_MOCK_PRODUCTS_DATA
         
-        # Verify open was called with 'utf-16-le' and succeeded, potentially other encodings failed before
+        # Verify open was called with 'utf-16-le' and succeeded, and it was the first attempt.
         assert builtins.open.call_args_list[0].kwargs['encoding'] == 'utf-16-le'
         mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using utf-16-le encoding")
         mock_logger.warning.assert_not_called() # No warnings if first attempt succeeds
+
+def test_load_local_products_valid_json_utf8_sig_succeeds_after_utf8_fails(mock_logger):
+    """
+    Test _load_local_products where utf-8 fails with UnicodeDecodeError, but utf-8-sig succeeds.
+    """
+    mock_json_content_str = json.dumps({"products": MOCK_PRODUCTS_RAW_FOR_JSON})
+    
+    mock_file_path = MagicMock(spec=Path)
+    mock_file_path.exists.return_value = True
+
+    def open_side_effect(file_path_arg, mode, encoding):
+        m_file = MagicMock()
+        if encoding == 'utf-16-le':
+            raise UnicodeDecodeError("mockcodec", b"", 0, 1, "mock reason for utf-16-le")
+        elif encoding == 'utf-16':
+            raise UnicodeDecodeError("mockcodec", b"", 0, 1, "mock reason for utf-16")
+        elif encoding == 'utf-8':
+            raise UnicodeDecodeError("mockcodec", b"", 0, 1, "mock reason for utf-8")
+        elif encoding == 'utf-8-sig': # This one succeeds
+            m_file.read.return_value = '\ufeff' + mock_json_content_str # Simulate BOM for utf-8-sig
+            return m_file
+        else:
+            pytest.fail(f"Open called with unexpected encoding: {encoding}")
+
+    with patch('app.services.local_product_service.Path') as MockPath, \
+         patch('builtins.open', side_effect=open_side_effect), \
+         patch('random.randint', return_value=1000):
+        
+        MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
+
+        service = LocalProductService() 
+        products = service._load_local_products()
+        
+        assert len(products) == len(TRANSFORMED_MOCK_PRODUCTS_DATA)
+        assert products == TRANSFORMED_MOCK_PRODUCTS_DATA
+        
+        mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using utf-8-sig encoding")
+        # Verify warnings for previous failed attempts
+        mock_logger.warning.assert_any_call(f"Failed to load with utf-16-le encoding: mockcodec: mock reason for utf-16-le")
+        mock_logger.warning.assert_any_call(f"Failed to load with utf-16 encoding: mockcodec: mock reason for utf-16")
+        mock_logger.warning.assert_any_call(f"Failed to load with utf-8 encoding: mockcodec: mock reason for utf-8")
+        
+        # Verify `open` calls order and count
+        assert builtins.open.call_count == 4
+        assert builtins.open.call_args_list[0].kwargs['encoding'] == 'utf-16-le'
+        assert builtins.open.call_args_list[1].kwargs['encoding'] == 'utf-16'
+        assert builtins.open.call_args_list[2].kwargs['encoding'] == 'utf-8'
+        assert builtins.open.call_args_list[3].kwargs['encoding'] == 'utf-8-sig'
+
+def test_load_local_products_valid_json_latin1_succeeds_after_others_fail(mock_logger):
+    """
+    Test _load_local_products where earlier encodings fail, but latin-1 succeeds.
+    """
+    mock_json_content_str = json.dumps({"products": MOCK_PRODUCTS_RAW_FOR_JSON})
+    
+    mock_file_path = MagicMock(spec=Path)
+    mock_file_path.exists.return_value = True
+
+    def open_side_effect(file_path_arg, mode, encoding):
+        m_file = MagicMock()
+        if encoding in ['utf-16-le', 'utf-16', 'utf-8', 'utf-8-sig']:
+            raise UnicodeDecodeError("mockcodec", b"", 0, 1, f"mock reason for {encoding}")
+        elif encoding == 'latin-1': # This one succeeds
+            m_file.read.return_value = mock_json_content_str
+            return m_file
+        else:
+            pytest.fail(f"Open called with unexpected encoding: {encoding}")
+
+    with patch('app.services.local_product_service.Path') as MockPath, \
+         patch('builtins.open', side_effect=open_side_effect), \
+         patch('random.randint', return_value=1000):
+        
+        MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
+
+        service = LocalProductService() 
+        products = service._load_local_products()
+        
+        assert len(products) == len(TRANSFORMED_MOCK_PRODUCTS_DATA)
+        assert products == TRANSFORMED_MOCK_PRODUCTS_DATA
+        
+        mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using latin-1 encoding")
+        # Verify warnings for previous failed attempts
+        assert mock_logger.warning.call_count == 4
+        assert any(f"Failed to load with {e} encoding" in call_args[0][0] for e in ['utf-16-le', 'utf-16', 'utf-8', 'utf-8-sig'] for call_args in mock_logger.warning.call_args_list)
+        
+        # Verify `open` calls order and count
+        assert builtins.open.call_count == 5
+        assert builtins.open.call_args_list[4].kwargs['encoding'] == 'latin-1'
+
 
 def test_load_local_products_invalid_json_all_encodings_fail(mock_logger):
     """
@@ -330,6 +423,8 @@ def test_load_local_products_invalid_json_all_encodings_fail(mock_logger):
         mock_logger.error.assert_called_with("All encoding attempts failed, using fallback products")
         mock_fallback.assert_called_once()
         assert result == mock_fallback.return_value
+        assert builtins.open.call_count == len(encodings)
+
 
 def test_load_local_products_unicode_decode_error_all_encodings_fail(mock_logger):
     """
@@ -361,6 +456,7 @@ def test_load_local_products_unicode_decode_error_all_encodings_fail(mock_logger
         mock_logger.error.assert_called_with("All encoding attempts failed, using fallback products")
         mock_fallback.assert_called_once()
         assert result == mock_fallback.return_value
+        assert builtins.open.call_count == len(encodings)
 
 def test_load_local_products_generic_exception(mock_logger):
     """
@@ -383,6 +479,7 @@ def test_load_local_products_generic_exception(mock_logger):
         mock_logger.error.assert_called_with("Error loading products from JSON file: Mock IO Error")
         mock_fallback.assert_called_once()
         assert result == mock_fallback.return_value
+        assert builtins.open.call_count == 1 # Only one call before IOError
 
 def test_load_local_products_empty_products_list_in_json(mock_logger):
     """
@@ -410,6 +507,28 @@ def test_load_local_products_json_missing_products_key(mock_logger):
     Test _load_local_products with a valid JSON file but missing the 'products' key.
     """
     mock_json_content = json.dumps({"some_other_key": "value"}) # Missing 'products' key
+    
+    with patch('app.services.local_product_service.Path') as MockPath, \
+         patch('builtins.open', mock_open(read_data=mock_json_content)), \
+         patch('random.randint', return_value=1000):
+        
+        mock_file_path = MagicMock(spec=Path)
+        mock_file_path.exists.return_value = True
+        MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
+
+        service = LocalProductService()
+        products = service._load_local_products()
+        
+        assert len(products) == 0 # Should fallback to empty list due to .get('products', [])
+        mock_logger.info.assert_any_call("Successfully loaded 0 products from JSON file using utf-8 encoding")
+        mock_logger.warning.assert_not_called()
+
+def test_load_local_products_json_products_key_not_list(mock_logger):
+    """
+    Test _load_local_products with a valid JSON file where 'products' key is not a list.
+    Should result in an empty list after .get('products', []).
+    """
+    mock_json_content = json.dumps({"products": "not_a_list"}) # 'products' key exists but is not a list
     
     with patch('app.services.local_product_service.Path') as MockPath, \
          patch('builtins.open', mock_open(read_data=mock_json_content)), \
@@ -515,6 +634,37 @@ def test_load_local_products_transformation_with_extra_spec_fields(mock_logger):
         assert products[0]['id'] == 'custom_spec_prod'
         assert products[0]['specifications'] == expected_transformed_spec
 
+def test_load_local_products_transformation_product_not_dict_causes_error(mock_logger):
+    """
+    Test _load_local_products when a product entry in the JSON list is not a dictionary.
+    This should cause an AttributeError during transformation and be caught by the general exception handler.
+    """
+    malformed_products_raw = [
+        MOCK_PRODUCTS_RAW_FOR_JSON[0],
+        "this is not a product dict", # Malformed entry
+        MOCK_PRODUCTS_RAW_FOR_JSON[1]
+    ]
+    mock_json_content = json.dumps({"products": malformed_products_raw})
+
+    with patch('app.services.local_product_service.Path') as MockPath, \
+         patch('builtins.open', mock_open(read_data=mock_json_content)), \
+         patch('random.randint', return_value=1000), \
+         patch('app.services.local_product_service.LocalProductService._get_fallback_products') as mock_fallback:
+        
+        mock_file_path = MagicMock(spec=Path)
+        mock_file_path.exists.return_value = True
+        MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
+
+        service = LocalProductService()
+        products = service._load_local_products()
+        
+        # The transformation loop will try to call .get() on a string, which raises AttributeError.
+        # This will be caught by the outer 'except Exception as e:'.
+        mock_logger.error.assert_called_once()
+        assert "Error loading products from JSON file: 'str' object has no attribute 'get'" in mock_logger.error.call_args[0][0]
+        mock_fallback.assert_called_once()
+        assert products == mock_fallback.return_value
+
 def test_load_local_products_first_encoding_succeeds_others_not_tried(mock_logger):
     """
     Test that once an encoding succeeds, no further encoding attempts are made.
@@ -548,7 +698,8 @@ def test_load_local_products_first_encoding_succeeds_others_not_tried(mock_logge
         
         assert len(products) == len(TRANSFORMED_MOCK_PRODUCTS_DATA)
         mock_logger.info.assert_any_call(f"Successfully loaded {len(TRANSFORMED_MOCK_PRODUCTS_DATA)} products from JSON file using utf-8 encoding")
-        mock_logger.warning.assert_called_with("Failed to load with utf-16 encoding: mockcodec: mock reason") # Only for utf-16-le and utf-16
+        mock_logger.warning.assert_any_call("Failed to load with utf-16-le encoding: mockcodec: mock reason")
+        mock_logger.warning.assert_any_call("Failed to load with utf-16 encoding: mockcodec: mock reason")
         assert mock_logger.warning.call_count == 2
         
         # Verify open was called exactly 3 times (utf-16-le, utf-16, utf-8)
@@ -675,6 +826,23 @@ def test_search_products_price_extraction_rp(mock_local_product_service_instance
     expected_ids = {'prod1', 'prod3', 'prod5', 'prod7'}
     assert product_ids == expected_ids
     assert all(p['price'] <= 150000 for p in results)
+
+def test_search_products_price_extraction_k_m(mock_local_product_service_instance):
+    """
+    Test search_products with price extraction from keyword (e.g., "Xk", "Xm").
+    """
+    service = mock_local_product_service_instance
+    results = service.search_products("product 300k") # Should include products <= 300,000
+    product_ids = {p['id'] for p in results}
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod7'}
+    assert product_ids == expected_ids
+    assert all(p['price'] <= 300000 for p in results)
+
+    results = service.search_products("gadget 5M") # Should include products <= 5,000,000
+    product_ids = {p['id'] for p in results}
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod4', 'prod5', 'prod6', 'prod7', 'prod8'}
+    assert product_ids == expected_ids
+    assert all(p['price'] <= 5000000 for p in results)
 
 def test_search_products_price_extraction_budget_keyword(mock_local_product_service_instance):
     """

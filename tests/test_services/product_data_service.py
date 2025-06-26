@@ -270,6 +270,29 @@ class TestProductDataService:
         products = await product_data_service.get_products() # No limit specified
         assert products == expected_products
         product_data_service.local_service.get_products.assert_called_once_with(20) # Default limit is 20
+    
+    @pytest.mark.asyncio
+    async def test_get_products_exception_in_fallback(self, product_data_service, mock_run_in_executor, caplog):
+        """
+        Test get_products when the initial call fails, and the fallback local_service.get_products also fails,
+        leading to the exception propagating.
+        """
+        # Simulate the initial path (e.g., search_products) raising an exception
+        mock_run_in_executor.side_effect = Exception("Initial search path failed")
+
+        # Simulate the fallback call (local_service.get_products) also raising an exception
+        product_data_service.local_service.get_products.side_effect = Exception("Fallback local service failed")
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(Exception, match="Fallback local service failed"):
+                await product_data_service.get_products(search="double_fail", limit=5)
+            
+            # Verify the first error was logged. The second exception propagates out.
+            assert "Error getting products: Initial search path failed" in caplog.text
+        
+        # Verify both underlying calls were made
+        product_data_service.local_service.search_products.assert_called_once_with("double_fail", 5) # Triggered by the search path
+        product_data_service.local_service.get_products.assert_called_once_with(5) # The fallback call
 
 
     @pytest.mark.asyncio

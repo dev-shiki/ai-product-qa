@@ -162,6 +162,23 @@ class TestSettings:
         assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text
         assert caplog.records[0].levelname == "ERROR"
 
+    def test_settings_init_raises_error_on_empty_string_google_api_key_env_var(self, monkeypatch, caplog):
+        """
+        Tests that Settings raises ValueError and logs an error when GOOGLE_API_KEY
+        is provided as an empty string via an environment variable.
+        This covers the 'not self.GOOGLE_API_KEY' condition for env var input.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "")
+
+        with caplog.at_level('ERROR'):
+            with pytest.raises(ValueError) as excinfo:
+                from app.utils.config import Settings
+                Settings()
+
+        assert "GOOGLE_API_KEY must be set in .env file" in str(excinfo.value)
+        assert "GOOGLE_API_KEY is not set or is using default value" in caplog.text
+        assert caplog.records[0].levelname == "ERROR"
+
     def test_settings_init_raises_validation_error_on_none_google_api_key_kwarg(self):
         """
         Tests that Settings raises Pydantic ValidationError when GOOGLE_API_KEY
@@ -292,8 +309,8 @@ class TestGetSettingsAndGlobal:
         assert first_call_settings is second_call_settings
         assert first_call_settings.GOOGLE_API_KEY == "cache-test-key"
         # Ensure the cache prevented re-reading environment variables, even if they change.
-        monkeypatch.setenv("GOOGLE_API_KEY", "changed-key")
-        assert second_call_settings.GOOGLE_API_KEY == "cache-test-key" # Still the original key
+        monkeypatch.setenv("GOOGLE_API_KEY", "changed-key-after-cache") # Change env var *after* first call
+        assert second_call_settings.GOOGLE_API_KEY == "cache-test-key" # Still the original key, proving caching
 
     def test_global_settings_is_initialized_correctly(self, monkeypatch):
         """
@@ -309,6 +326,33 @@ class TestGetSettingsAndGlobal:
         assert settings.GOOGLE_API_KEY == "global-key-on-import"
         assert settings.API_HOST == "global-host-on-import"
         assert settings.API_PORT == 8000 # Should be default
+
+    def test_global_settings_is_immutable_after_initial_import(self, monkeypatch):
+        """
+        Tests that the global 'settings' object, once initialized on module import,
+        remains the same instance and does not reflect subsequent environment variable changes,
+        due to the lru_cache on get_settings.
+        """
+        monkeypatch.setenv("GOOGLE_API_KEY", "initial-global-key")
+        
+        # First import, sets global settings
+        from app.utils.config import settings as initial_settings_instance
+        
+        assert initial_settings_instance.GOOGLE_API_KEY == "initial-global-key"
+
+        # Change environment variable *after* initial import
+        monkeypatch.setenv("GOOGLE_API_KEY", "changed-global-key")
+        
+        # Re-import (or access again) - the cached instance should still be used.
+        # The clean_config_module fixture ensures a fresh import for each test,
+        # but within a single test, accessing `app.utils.config.settings`
+        # after it's been imported will return the same cached instance due to `lru_cache`.
+        from app.utils.config import settings as current_settings_instance
+
+        # It should be the *same* instance and reflect the *original* value
+        assert current_settings_instance is initial_settings_instance
+        assert current_settings_instance.GOOGLE_API_KEY == "initial-global-key"
+
 
     def test_global_settings_fails_on_missing_key_at_import(self, monkeypatch, caplog):
         """

@@ -157,10 +157,10 @@ async def test_get_response_success_with_products(ai_service_instance, mock_prod
         assert "Brand: BrandX" in prompt
         assert "Category: laptop" in prompt
         assert "Rating: 4.5/5" in prompt
-        assert "Description: High performance gaming laptop for pros..." in prompt # Checks truncation
+        assert "Description: High performance gaming laptop for pros."[:200] + "..." in prompt # Checks truncation
         assert "2. Budget Laptop" in prompt
         assert "Successfully generated AI response" in caplog.text
-        assert "model=\"gemini-2.5-flash\"" in repr(call_args[0]['model']) # Check model name in prompt generation
+        assert call_args[0]['model'] == "gemini-2.5-flash"
 
 @pytest.mark.asyncio
 async def test_get_response_success_no_products(ai_service_instance, mock_product_data_service, mock_genai_client, caplog):
@@ -188,6 +188,7 @@ async def test_get_response_success_no_products(ai_service_instance, mock_produc
         assert "No specific products found, but I can provide general recommendations." in prompt
         assert "Relevant Products:" not in prompt # Ensure this section is not present
         assert "Successfully generated AI response" in caplog.text
+        assert call_args[0]['model'] == "gemini-2.5-flash"
 
 @pytest.mark.asyncio
 async def test_get_response_ai_generation_failure(ai_service_instance, mock_genai_client, caplog):
@@ -236,18 +237,18 @@ async def test_get_response_product_data_service_failure(ai_service_instance, mo
         ("Jam tangan pintar", "jam", None),
         ("Ponsel dengan budget 7 juta", "smartphone", 7_000_000),
         ("Headset gaming", "headphone", None),
-        ("Cari produk audio", "audio", None),
+        ("Cari produk audio", "headphone", None), # 'audio' keyword in question, 'headphone' category wins due to map order
         ("Saya mau beli HP dengan 3 juta", "smartphone", 3_000_000),
         ("drone budget 10 juta", "drone", 10_000_000),
         ("notebook 8 juta", "laptop", 8_000_000),
         ("ipad pro", "tablet", None),
         ("handphone 2 juta", "smartphone", 2_000_000),
         ("TV yang murah", "tv", 5_000_000), # Test 'murah' with category
-        ("budget murah untuk audio", "audio", 5_000_000), # Test 'budget' with category
+        ("budget murah untuk audio", "headphone", 5_000_000), # Test 'budget' with category, 'audio' in headphone keywords
         ("telepon seluler", "smartphone", None), # Test synonym
         ("komputer baru", "laptop", None), # Test synonym
         ("fotografi gear", "kamera", None), # Test synonym
-        ("speaker bluetooth", "audio", None), # Test synonym
+        ("speaker bluetooth", "audio", None), # Test synonym, 'speaker' is in 'audio' category
         ("ponsel android 4 juta", "smartphone", 4_000_000), # Combined
         ("smartwatch 1 juta", "jam", 1_000_000), # Combined
         ("laptop budget", "laptop", 5_000_000), # Category + "budget"
@@ -266,12 +267,19 @@ async def test_get_response_product_data_service_failure(ai_service_instance, mo
         ("Apa itu AI?", None, None),
         ("Berapa banyak produk yang kalian punya?", None, None),
         ("Rekomendasi umum", None, None),
-        ("Apa rekomendasi terbaik?", None, None), # Existing in previous set, moved here for clarity
-        ("Produk", None, None), # Existing in previous set, moved here for clarity
+        ("Apa rekomendasi terbaik?", None, None),
+        ("Produk", None, None),
 
         # Test for overlapping keywords, ensuring the first match in category_mapping applies
         ("Saya mau beli notebook atau hp?", "laptop", None), # 'notebook' (laptop) appears before 'hp' (smartphone) in mapping
-        ("headset dan earphone murah", "headphone", 5_000_000) # Only one category, but both keywords present
+        ("headset dan earphone murah", "headphone", 5_000_000), # Only one category, but both keywords present
+
+        # New cases to cover identified gaps
+        ("iPhone 15 terbaru", None, None), # Number without 'juta' should not be detected as price
+        ("Cari TV terbaru harga 10", "tv", None), # Number not followed by 'juta'
+        ("laptop budget juta", "laptop", 5_000_000), # "budget" detected, not "juta" regex
+        ("LAPTOP GAMING 15 JUTA", "laptop", 15_000_000), # Mixed casing
+        ("saya butuh tablet 100 juta", "tablet", 100_000_000), # Large number for price
     ]
 )
 async def test_get_response_category_and_price_detection(
@@ -280,7 +288,7 @@ async def test_get_response_category_and_price_detection(
 ):
     """
     Tests that get_response correctly extracts category and max_price from various questions.
-    It verifies the arguments passed to `smart_search_products`.
+    It verifies the arguments passed to `smart_search_products` including the hardcoded limit.
     """
     await ai_service_instance.get_response(question)
 
@@ -290,7 +298,7 @@ async def test_get_response_category_and_price_detection(
     assert call_args[1]['category'] == expected_category
     assert call_args[1]['max_price'] == expected_max_price
     assert call_args[1]['keyword'] == question # Ensure keyword is always passed
-
+    assert call_args[1]['limit'] == 5 # Ensure limit is always 5
 
 @pytest.mark.asyncio
 async def test_get_response_empty_question(ai_service_instance, mock_product_data_service, mock_genai_client):
@@ -309,7 +317,7 @@ async def test_get_response_empty_question(ai_service_instance, mock_product_dat
     call_args, _ = mock_genai_client.models.generate_content.call_args
     prompt = call_args[0]['contents']
     assert "Question: \n\nNo specific products found, but I can provide general recommendations." in prompt
-    assert "model=\"gemini-2.5-flash\"" in repr(call_args[0]['model'])
+    assert call_args[0]['model'] == "gemini-2.5-flash"
 
 @pytest.mark.asyncio
 async def test_get_response_product_context_missing_keys(ai_service_instance, mock_product_data_service, mock_genai_client):
@@ -361,11 +369,10 @@ async def test_get_response_product_context_missing_keys(ai_service_instance, mo
     assert "Rating: 0/5" in prompt # Default for rating if key is missing in specifications
     assert "Description: Another product description...." in prompt
 
-
 @pytest.mark.asyncio
-async def test_get_response_product_description_truncation(ai_service_instance, mock_product_data_service, mock_genai_client):
+async def test_get_response_product_description_truncation_longer_than_200_chars(ai_service_instance, mock_product_data_service, mock_genai_client):
     """
-    Tests that product descriptions are truncated to 200 characters and appended with '...' correctly.
+    Tests that product descriptions longer than 200 characters are truncated to 200 characters and appended with '...'.
     """
     question = "Long description product"
     long_description = "A" * 250 # Create a description longer than 200 characters
@@ -383,7 +390,52 @@ async def test_get_response_product_description_truncation(ai_service_instance, 
     expected_truncated_desc = long_description[:200] + "..."
     assert f"Description: {expected_truncated_desc}\n\n" in prompt
     assert long_description not in prompt # Ensure the full, untruncated description is not present
-    assert len(expected_truncated_desc) == 203 # 200 chars + "..."
+    assert len(expected_truncated_desc) == 203
+
+@pytest.mark.asyncio
+async def test_get_response_product_description_truncation_exact_200_chars(ai_service_instance, mock_product_data_service, mock_genai_client):
+    """
+    Tests that product descriptions exactly 200 characters long are still appended with '...'.
+    """
+    question = "Exact 200 chars desc"
+    exact_description = "B" * 200 # Create a description exactly 200 characters
+    mock_products = [
+        {"name": "Product Exact Desc", "price": 100, "brand": "Test", "category": "test", "specifications": {"rating": 5}, "description": exact_description},
+    ]
+    mock_product_data_service.smart_search_products.return_value = (mock_products, "Found one.")
+    mock_genai_client.models.generate_content.return_value.text = "Exact 200 chars truncation response."
+
+    await ai_service_instance.get_response(question)
+
+    call_args, _ = mock_genai_client.models.generate_content.call_args
+    prompt = call_args[0]['contents']
+
+    expected_output = exact_description + "..." # Source code always appends "..."
+    assert f"Description: {expected_output}\n\n" in prompt
+    assert len(expected_output) == 203
+
+@pytest.mark.asyncio
+async def test_get_response_product_description_truncation_less_than_200_chars(ai_service_instance, mock_product_data_service, mock_genai_client):
+    """
+    Tests that product descriptions less than 200 characters long are still appended with '...'.
+    """
+    question = "Short description"
+    short_description = "C" * 150 # Create a description less than 200 characters
+    mock_products = [
+        {"name": "Product Short Desc", "price": 100, "brand": "Test", "category": "test", "specifications": {"rating": 5}, "description": short_description},
+    ]
+    mock_product_data_service.smart_search_products.return_value = (mock_products, "Found one.")
+    mock_genai_client.models.generate_content.return_value.text = "Short desc truncation response."
+
+    await ai_service_instance.get_response(question)
+
+    call_args, _ = mock_genai_client.models.generate_content.call_args
+    prompt = call_args[0]['contents']
+
+    expected_output = short_description + "..." # Source code always appends "..."
+    assert f"Description: {expected_output}\n\n" in prompt
+    assert len(expected_output) == 153 # 150 + 3 for "..."
+
 
 # --- Tests for generate_response method (legacy/synchronous) ---
 
@@ -406,7 +458,7 @@ def test_generate_response_success(ai_service_instance, mock_genai_client, caplo
         assert response == expected_response_text
         mock_genai_client.models.generate_content.assert_called_once()
         call_args, _ = mock_genai_client.models.generate_content.call_args
-        assert "model=\"gemini-2.0-flash\"" in repr(call_args[0]['model']) # Check model name
+        assert call_args[0]['model'] == "gemini-2.0-flash" # Explicitly check model name
         
         expected_prompt_part = f"""You are a helpful product assistant. Based on the following context, provide a helpful and informative response:
 
