@@ -24,7 +24,7 @@ COVERAGE_SETTINGS = {
 
 # Test generation settings
 TEST_GENERATION_SETTINGS = {
-    "model": "gemini-2.0-flash-exp",  # Updated to latest model
+    "model": "gemini-2.5-flash",  # Updated to latest model
     "target_test_coverage": 90.0,  # Target coverage for generated tests
     "max_retries": 3,  # Maximum retries for API calls
     "delay_between_calls": 2,  # Delay between API calls (seconds)
