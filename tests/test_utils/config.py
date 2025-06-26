@@ -1,7 +1,6 @@
 import pytest
 import sys
 import os
-from functools import lru_cache
 from pydantic import ValidationError
 from pathlib import Path
 import logging
@@ -197,6 +196,64 @@ class TestSettings:
         assert settings.FRONTEND_HOST == "frontend_from_env_var"
         assert settings.FRONTEND_PORT == 2500
         assert settings.DEBUG is False
+
+    def test_settings_init_kwargs_overrides_env_file(self, create_env_file, monkeypatch):
+        """
+        Tests that direct kwargs initialization takes precedence over values
+        defined in a .env file.
+        """
+        env_file_content = """
+        GOOGLE_API_KEY=key_from_env_file_to_override
+        API_HOST=host_from_env_file_to_override
+        API_PORT=1000
+        """
+        create_env_file.write_text(env_file_content.strip())
+
+        # Ensure no conflicting environment variables
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("API_HOST", raising=False)
+        monkeypatch.delenv("API_PORT", raising=False)
+
+        from app.utils.config import Settings
+        settings = Settings(GOOGLE_API_KEY="key_from_kwarg", API_HOST="host_from_kwarg", API_PORT=2000)
+
+        assert settings.GOOGLE_API_KEY == "key_from_kwarg"
+        assert settings.API_HOST == "host_from_kwarg"
+        assert settings.API_PORT == 2000
+        # Other fields should fall back to default
+        assert settings.FRONTEND_HOST == "localhost"
+
+    def test_settings_init_success_when_env_file_does_not_exist(self, monkeypatch, tmp_path):
+        """
+        Tests that Settings falls back to environment variables or defaults
+        when the configured .env file does not exist.
+        """
+        # Change CWD to tmp_path, but don't create an .env file
+        original_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            # Ensure no env vars are set to rely purely on defaults after checking for .env
+            monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+            monkeypatch.delenv("API_HOST", raising=False)
+            monkeypatch.delenv("API_PORT", raising=False)
+            monkeypatch.delenv("FRONTEND_HOST", raising=False)
+            monkeypatch.delenv("FRONTEND_PORT", raising=False)
+            monkeypatch.delenv("DEBUG", raising=False)
+
+            # Set a valid GOOGLE_API_KEY via env var, as it's mandatory
+            monkeypatch.setenv("GOOGLE_API_KEY", "valid-key-no-env-file")
+
+            from app.utils.config import Settings
+            settings = Settings()
+
+            assert settings.GOOGLE_API_KEY == "valid-key-no-env-file"
+            assert settings.API_HOST == "localhost" # Default
+            assert settings.API_PORT == 8000 # Default
+            assert settings.FRONTEND_HOST == "localhost" # Default
+            assert settings.FRONTEND_PORT == 8501 # Default
+            assert settings.DEBUG is True # Default
+        finally:
+            os.chdir(original_cwd) # Restore original CWD
 
     def test_settings_init_raises_error_on_missing_google_api_key(self, monkeypatch, caplog):
         """

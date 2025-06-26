@@ -231,7 +231,7 @@ async def test_get_response_product_data_service_failure(ai_service_instance, mo
         # Test cases for category and price detection
         ("Cari laptop gaming 10 juta", "laptop", 10_000_000),
         ("Smartphone murah", "smartphone", 5_000_000), # Detects 'smartphone' and 'murah' for price
-        ("Tablet di bawah 5 juta", "tablet", 5_000_000), # Detects 'tablet' and '5 juta' for price
+        ("Tablet di bawah 5 juta", "tablet", 5_000_000), # Deteksi 'tablet' and '5 juta' for price
         ("earphone bluetooth", "headphone", None),
         ("Kamera DSLR bagus", "kamera", None),
         ("TV Samsung 20 juta", "tv", 20_000_000),
@@ -441,6 +441,29 @@ async def test_get_response_product_description_truncation_less_than_200_chars(a
     expected_output = short_description + "..." # Source code always appends "..."
     assert f"Description: {expected_output}\n\n" in prompt
     assert len(expected_output) == 153 # 150 + 3 for "..."
+
+@pytest.mark.asyncio
+async def test_get_response_product_description_empty_string(ai_service_instance, mock_product_data_service, mock_genai_client):
+    """
+    Tests that product descriptions that are an empty string result in '...' in the context.
+    The source code uses `[:200]` and then `+ "..."`.
+    If the description is `""`, `""[:200]` is `""`, then `"" + "..."` is `"..."`.
+    """
+    question = "Product with empty description"
+    mock_products = [
+        {"name": "Empty Desc Product", "price": 500, "brand": "Test", "category": "test", "specifications": {"rating": 4}, "description": ""},
+    ]
+    mock_product_data_service.smart_search_products.return_value = (mock_products, "Found one.")
+    mock_genai_client.models.generate_content.return_value.text = "Response about empty description."
+
+    await ai_service_instance.get_response(question)
+
+    call_args, _ = mock_genai_client.models.generate_content.call_args
+    prompt = call_args[0]['contents']
+
+    expected_output = "..."
+    assert f"Description: {expected_output}\n\n" in prompt
+    assert len(expected_output) == 3
 
 
 # --- Tests for generate_response method (legacy/synchronous) ---

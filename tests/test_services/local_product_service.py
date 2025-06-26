@@ -475,6 +475,42 @@ def test_load_local_products_invalid_json_all_encodings_fail(mock_logger):
         assert result == mock_fallback.return_value
         assert builtins.open.call_count == len(encodings)
 
+def test_load_local_products_empty_file_content(mock_logger):
+    """
+    Test _load_local_products with an empty JSON file. This should cause a JSONDecodeError.
+    """
+    mock_json_content = ""
+    
+    mock_file_path = MagicMock(spec=Path)
+    mock_file_path.exists.return_value = True
+
+    def open_side_effect_empty_file(file_path_arg, mode, encoding):
+        m_file = MagicMock()
+        m_file.read.return_value = mock_json_content
+        return m_file
+
+    with patch('app.services.local_product_service.Path') as MockPath, \
+         patch('builtins.open', side_effect=open_side_effect_empty_file), \
+         patch('app.services.local_product_service.LocalProductService._get_fallback_products') as mock_fallback:
+        
+        MockPath.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_file_path
+
+        service = LocalProductService()
+        result = service._load_local_products()
+        
+        encodings = ['utf-16-le', 'utf-16', 'utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
+        for encoding in encodings:
+            # The exact error message might vary slightly across Python versions or implementations
+            # so we check for common parts.
+            mock_logger.warning.assert_any_call(
+                f"Failed to load with {encoding} encoding: json.JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+            )
+        
+        mock_logger.error.assert_called_with("All encoding attempts failed, using fallback products")
+        mock_fallback.assert_called_once()
+        assert result == mock_fallback.return_value
+        assert builtins.open.call_count == len(encodings)
+
 
 def test_load_local_products_unicode_decode_error_all_encodings_fail(mock_logger):
     """
@@ -1096,7 +1132,6 @@ def test_get_product_details_error_handling(mock_local_product_service_instance,
     Test error handling in get_product_details.
     """
     service = mock_local_product_service_instance
-    # Simulate an error by making products attribute raise an exception on access
     with patch.object(service, 'products', new=MagicMock(side_effect=Exception("List iteration error"))):
         product = service.get_product_details("prod1")
         assert product is None
@@ -1674,6 +1709,29 @@ def test_smart_search_products_empty_all_filters(mock_local_product_service_inst
     # Should return first `limit` products as all products match empty criteria.
     assert products == TRANSFORMED_MOCK_PRODUCTS_DATA[:2]
     assert message == "Berikut produk yang sesuai dengan kriteria Anda."
+
+def test_smart_search_products_default_limit(mock_local_product_service_instance):
+    """
+    Test smart_search_products using its default limit (5) when not explicitly provided.
+    """
+    service = mock_local_product_service_instance
+    products, message = service.smart_search_products(keyword="Product")
+    assert len(products) == 5
+    # The first 5 products matching "Product" keyword should be returned, sorted by relevance.
+    # prod1, prod2, prod3, prod5, prod6, prod7, prod8 all have "Product" or similar.
+    # Sorting from test_search_products_relevance_sorting_budget_preference for "product murah"
+    # showed prod7, prod3, prod1 at top. If no "murah", order is different.
+    # When just "Product", relevance is based on name/description matches.
+    # prod1 ("Product A") should be top.
+    # prod3 ("Product C")
+    # prod5 ("Product E (Best Seller)")
+    # prod2 ("Product B")
+    # prod7 ("Minimal Product")
+    expected_ids = {'prod1', 'prod2', 'prod3', 'prod5', 'prod7'}
+    actual_ids = {p['id'] for p in products}
+    assert actual_ids == expected_ids
+    assert message == "Berikut produk yang sesuai dengan kriteria Anda."
+
 
 def test_smart_search_products_limit_zero(mock_local_product_service_instance):
     """
