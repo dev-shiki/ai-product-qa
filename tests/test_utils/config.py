@@ -20,8 +20,10 @@ def clean_config_module():
     # Ensure the module is not already loaded or clear its state if it is.
     if 'app.utils.config' in sys.modules:
         _config_module = sys.modules['app.utils.config']
+        # Clear lru_cache for get_settings if it exists and is cacheable
         if hasattr(_config_module, 'get_settings') and callable(getattr(_config_module.get_settings, 'cache_clear', None)):
             _config_module.get_settings.cache_clear()
+        # Remove the module to force a fresh import
         del sys.modules['app.utils.config']
     
     yield # Allow the test to run
@@ -552,3 +554,16 @@ class TestGetSettingsAndGlobal:
         # Verify that it's a new instance and has the new API key
         assert second_settings is not first_settings
         assert second_settings.GOOGLE_API_KEY == "second-key"
+
+    def test_logger_name_and_type(self):
+        """
+        Tests that the module-level logger object is correctly named and is an instance of logging.Logger.
+        This verifies the setup of the logger itself.
+        """
+        import logging
+        from app.utils.config import logger
+        assert logger.name == "app.utils.config"
+        assert isinstance(logger, logging.Logger)
+        # Verify the initial logging level, though it might be configured externally later.
+        # By default, loggers have a level of NOTSET.
+        assert logger.level == logging.NOTSET

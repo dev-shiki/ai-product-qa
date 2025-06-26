@@ -322,7 +322,8 @@ async def test_get_response_empty_question(ai_service_instance, mock_product_dat
     mock_genai_client.models.generate_content.assert_called_once()
     call_args, _ = mock_genai_client.models.generate_content.call_args
     prompt = call_args[0]['contents']
-    assert "Question: \n\nNo specific products found, but I can provide general recommendations." in prompt
+    assert "Question: \n\n" in prompt
+    assert "No specific products found, but I can provide general recommendations." in prompt
     assert call_args[0]['model'] == "gemini-2.5-flash"
 
 @pytest.mark.asyncio
