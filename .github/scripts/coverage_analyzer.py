@@ -24,33 +24,55 @@ class CoverageAnalyzer:
         self.xml_file = Path("coverage.xml")
         
     def run_coverage(self) -> bool:
-        """Menjalankan coverage test dan generate XML report"""
+        """Menjalankan coverage test menggunakan coverage CLI (seperti codecov workflow)"""
         try:
-            # Run pytest with coverage
-            cmd = [
-                "python", "-m", "pytest", 
-                "--cov=" + str(self.source_dir),
-                "--cov-report=xml",
-                "--cov-report=term-missing",
+            # Step 1: Run tests with coverage
+            logger.info("Running tests with coverage...")
+            cmd_run = [
+                "coverage", "run", 
+                "--source=" + str(self.source_dir),
+                "-m", "pytest", 
                 str(self.test_dir),
                 "-v"
             ]
             
-            logger.info(f"Running coverage command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)  # 2 minutes timeout
+            logger.info(f"Running coverage command: {' '.join(cmd_run)}")
+            result_run = subprocess.run(cmd_run, capture_output=True, text=True, timeout=300)  # 5 minutes timeout
             
-            if result.returncode != 0:
-                logger.warning(f"Coverage run had issues: {result.stderr}")
-                # Don't return False immediately, check if XML was generated
-                if not self.xml_file.exists():
-                    logger.error("Coverage XML file not generated")
+            if result_run.returncode != 0:
+                logger.warning(f"Coverage run had issues: {result_run.stderr}")
+                # Continue anyway to check if coverage data was generated
+            
+            # Step 2: Generate coverage report
+            logger.info("Generating coverage report...")
+            cmd_report = ["coverage", "report", "-m"]
+            result_report = subprocess.run(cmd_report, capture_output=True, text=True, timeout=60)
+            
+            if result_report.returncode == 0:
+                logger.info("Coverage report generated successfully")
+                logger.info(f"Report output:\n{result_report.stdout}")
+            else:
+                logger.warning(f"Coverage report generation had issues: {result_report.stderr}")
+            
+            # Step 3: Generate XML report
+            logger.info("Generating XML coverage report...")
+            cmd_xml = ["coverage", "xml"]
+            result_xml = subprocess.run(cmd_xml, capture_output=True, text=True, timeout=60)
+            
+            if result_xml.returncode == 0:
+                logger.info("Coverage XML generated successfully")
+                if self.xml_file.exists():
+                    logger.info(f"XML file created: {self.xml_file}")
+                    return True
+                else:
+                    logger.error("XML file not found after generation")
                     return False
+            else:
+                logger.error(f"XML generation failed: {result_xml.stderr}")
+                return False
                 
-            logger.info("Coverage analysis completed successfully")
-            return True
-            
         except subprocess.TimeoutExpired:
-            logger.error("Coverage analysis timed out after 2 minutes")
+            logger.error("Coverage analysis timed out after 5 minutes")
             return False
         except Exception as e:
             logger.error(f"Error running coverage: {e}")
@@ -68,8 +90,24 @@ class CoverageAnalyzer:
             
             coverage_data = {}
             
-            # Try different XML structures
+            # Parse coverage data from XML
             for package in root.findall(".//package"):
+                package_name = package.get("name", "")
+                if package_name:
+                    # Convert absolute paths to relative paths
+                    if package_name.startswith("/"):
+                        package_name = package_name[1:]
+                    
+                    # Get line rate for the package
+                    line_rate = package.get("line-rate", "0")
+                    try:
+                        lines_covered = float(line_rate) * 100
+                        coverage_data[package_name] = lines_covered
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid line-rate for {package_name}: {line_rate}")
+                        coverage_data[package_name] = 0.0
+                
+                # Also check individual classes within packages
                 for class_elem in package.findall(".//class"):
                     filename = class_elem.get("filename", "")
                     if filename:
@@ -77,7 +115,7 @@ class CoverageAnalyzer:
                         if filename.startswith("/"):
                             filename = filename[1:]
                         
-                        # Get coverage percentage - try different attributes
+                        # Get coverage percentage
                         line_rate = class_elem.get("line-rate", "0")
                         try:
                             lines_covered = float(line_rate) * 100
@@ -86,59 +124,36 @@ class CoverageAnalyzer:
                             logger.warning(f"Invalid line-rate for {filename}: {line_rate}")
                             coverage_data[filename] = 0.0
             
-            # If no data found with class elements, try package level
+            # If no data found, try alternative parsing
             if not coverage_data:
-                for package in root.findall(".//package"):
-                    filename = package.get("name", "")
-                    if filename:
-                        if filename.startswith("/"):
-                            filename = filename[1:]
-                        
-                        line_rate = package.get("line-rate", "0")
-                        try:
-                            lines_covered = float(line_rate) * 100
-                            coverage_data[filename] = lines_covered
-                        except (ValueError, TypeError):
-                            logger.warning(f"Invalid line-rate for {filename}: {line_rate}")
-                            coverage_data[filename] = 0.0
-            
-            # If still no data, try to parse manually
-            if not coverage_data:
-                logger.warning("No coverage data found in XML, attempting manual parsing")
-                coverage_data = self._parse_coverage_manual()
+                logger.warning("No coverage data found in XML, attempting alternative parsing")
+                coverage_data = self._parse_coverage_alternative()
                         
             logger.info(f"Parsed coverage for {len(coverage_data)} files")
             return coverage_data
             
         except Exception as e:
             logger.error(f"Error parsing coverage XML: {e}")
-            return self._parse_coverage_manual()
+            return self._parse_coverage_alternative()
     
-    def _parse_coverage_manual(self) -> Dict[str, float]:
-        """Manual parsing jika XML parsing gagal"""
+    def _parse_coverage_alternative(self) -> Dict[str, float]:
+        """Alternative parsing menggunakan coverage report terminal output"""
         try:
-            # Try to get coverage from terminal output
-            cmd = [
-                "python", "-m", "pytest", 
-                "--cov=" + str(self.source_dir),
-                "--cov-report=term",
-                str(self.test_dir),
-                "-q"
-            ]
-            
+            # Get coverage from terminal output
+            cmd = ["coverage", "report", "-m"]
             result = subprocess.run(cmd, capture_output=True, text=True)
             
             coverage_data = {}
             if result.stdout:
                 lines = result.stdout.split('\n')
                 for line in lines:
+                    # Parse lines like "app/file.py                   10      8    20%   8-10"
                     if 'app/' in line and '%' in line:
-                        # Parse line like "app/file.py                   10      8    20%"
                         parts = line.strip().split()
                         if len(parts) >= 4:
                             filename = parts[0]
                             try:
-                                coverage_str = parts[-1].replace('%', '')
+                                coverage_str = parts[-2].replace('%', '')  # Second to last part
                                 coverage = float(coverage_str)
                                 coverage_data[filename] = coverage
                             except (ValueError, IndexError):
@@ -147,7 +162,7 @@ class CoverageAnalyzer:
             return coverage_data
             
         except Exception as e:
-            logger.error(f"Manual parsing failed: {e}")
+            logger.error(f"Alternative parsing failed: {e}")
             return {}
     
     def find_lowest_coverage_files(self, coverage_data: Dict[str, float], limit: int = 5) -> List[Tuple[str, float]]:
@@ -157,7 +172,7 @@ class CoverageAnalyzer:
             
         # Filter hanya file Python dan sort berdasarkan coverage
         python_files = [(f, c) for f, c in coverage_data.items() 
-                       if f.endswith('.py') and f.startswith('app/')]
+                       if f.endswith('.py') and ('app/' in f or f.startswith('app/'))]
         
         # Sort by coverage (ascending)
         sorted_files = sorted(python_files, key=lambda x: x[1])
@@ -190,12 +205,17 @@ class CoverageAnalyzer:
         """Main function untuk analyze coverage dan generate report"""
         logger.info("Starting coverage analysis...")
         
-        # Run coverage
+        # Run coverage using coverage CLI
         if not self.run_coverage():
             return {"error": "Failed to run coverage"}
         
         # Parse coverage data
         coverage_data = self.parse_coverage_xml()
+        if not coverage_data:
+            logger.warning("No coverage data found in XML, trying alternative method")
+            # Try to get coverage from .coverage file directly
+            coverage_data = self._parse_coverage_alternative()
+            
         if not coverage_data:
             return {"error": "No coverage data found"}
         
@@ -206,6 +226,7 @@ class CoverageAnalyzer:
         report = {
             "timestamp": str(Path.cwd()),
             "total_files": len(coverage_data),
+            "coverage_data": coverage_data,
             "lowest_coverage_files": []
         }
         

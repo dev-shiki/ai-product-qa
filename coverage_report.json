@@ -1,0 +1,24 @@
+{
+  "timestamp": "E:\\porto\\ai-product-qa",
+  "total_files": 17,
+  "coverage_data": {
+    ".": 0.0,
+    "main.py": 0.0,
+    "api": 0.0,
+    "api/__init__.py": 100.0,
+    "api/products.py": 0.0,
+    "api/queries.py": 0.0,
+    "models": 100.0,
+    "models/__init__.py": 100.0,
+    "models/product.py": 100.0,
+    "services": 61.040000000000006,
+    "services/__init__.py": 100.0,
+    "services/ai_service.py": 32.26,
+    "services/local_product_service.py": 82.42,
+    "services/product_data_service.py": 35.370000000000005,
+    "utils": 100.0,
+    "utils/__init__.py": 100.0,
+    "utils/config.py": 100.0
+  },
+  "lowest_coverage_files": []
+}
