@@ -52,10 +52,19 @@ Current Coverage: {coverage}%
 Here's the source code:
 ```python
 {content}
+"""
+
+        if existing_test:
+            prompt += f"""
+Here's the existing test file (if any):
+```python
+{existing_test}
 ```
+"""
+        else:
+            prompt += "No existing test file found."
 
-{f"Here's the existing test file (if any):\n```python\n{existing_test}\n```" if existing_test else "No existing test file found."}
-
+        prompt += """
 Please generate a complete, production-ready test file that:
 1. Uses pytest framework
 2. Has comprehensive test coverage (aim for 90%+ coverage)
@@ -66,7 +75,7 @@ Please generate a complete, production-ready test file that:
 7. Handles both success and error scenarios
 8. Uses appropriate fixtures and setup/teardown
 
-The test file should be named: test_{filepath.replace('app/', '')}
+The test file should be named: test_""" + filepath.replace('app/', '') + """
 
 Return ONLY the complete test code without any explanations or markdown formatting.
 """
