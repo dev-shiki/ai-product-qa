@@ -350,32 +350,42 @@ def main():
     """Main function"""
     try:
         generator = TestGenerator()
-        results = generator.process_coverage_report()
         
+        # Load coverage report
+        if not Path("coverage_report.json").exists():
+            logger.error("coverage_report.json not found")
+            return
+        
+        with open("coverage_report.json", "r", encoding="utf-8") as f:
+            coverage_data = json.load(f)
+        
+        # Get files with low coverage
+        low_coverage_files = []
+        for item in coverage_data.get("lowest_coverage_files", []):
+            filepath = item.get("filepath", "")
+            if filepath and Path(filepath).exists():
+                low_coverage_files.append(filepath)
+        
+        if not low_coverage_files:
+            logger.info("No files with low coverage found")
+            return
+        
+        # Generate focused tests
+        results = generator.generate_tests(low_coverage_files, coverage_data)
+
         # Save results
         with open("test_generation_results.json", "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
-        
+
         logger.info("Test generation results saved to test_generation_results.json")
-        
-        if "error" in results:
-            logger.error(f"Test generation failed: {results['error']}")
-            sys.exit(1)
-        
+
         # Print summary
-        print("\n=== TEST GENERATION SUMMARY ===")
-        print(f"Model: {TEST_GENERATION_SETTINGS['model']}")
-        print(f"Files processed: {len(results['processed_files'])}")
-        print(f"Successful: {results['success_count']}")
-        print(f"Errors: {results['error_count']}")
-        print(f"Success rate: {(results['success_count']/len(results['processed_files'])*100):.1f}%" if results['processed_files'] else "N/A")
-        
-        for file_result in results["processed_files"]:
-            status = "✅" if file_result.get("test_result", {}).get("success", False) else "❌"
-            print(f"{status} {file_result['filepath']} ({file_result['coverage']:.1f}% coverage)")
-        
+        successful = sum(1 for r in results if r.get("success", False))
+        total = len(results)
+        logger.info(f"Generated {successful}/{total} focused tests successfully")
+
     except Exception as e:
-        logger.error(f"Test generation failed: {e}")
+        logger.error(f"Test generation failed: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
