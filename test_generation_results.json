@@ -1,5 +1,23 @@
 [
   {
+    "file": "app/services/ai_service.py",
+    "function": "generate_response",
+    "success": true,
+    "test_file": "tests/test_ai_service_v2.py"
+  },
+  {
+    "file": "app/services/local_product_service.py",
+    "function": "search_products",
+    "success": true,
+    "test_file": "tests/test_local_product_service_v2.py"
+  },
+  {
+    "file": "app/services/product_data_service.py",
+    "function": "get_products_by_category",
+    "success": true,
+    "test_file": "tests/test_product_data_service_v2.py"
+  },
+  {
     "file": "app/utils/config.py",
     "function": "get_settings",
     "success": true,
