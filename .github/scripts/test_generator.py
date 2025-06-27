@@ -37,47 +37,38 @@ class TestGenerator:
         logger.info(f"Using Gemini model: {TEST_GENERATION_SETTINGS['model']}")
         
     def generate_test_prompt(self, file_info: Dict) -> str:
-        """Generate prompt untuk Gemini berdasarkan file info"""
+        """Generate prompt untuk Gemini berdasarkan file info - fokus pada satu fungsi saja"""
         filepath = file_info["filepath"]
         content = file_info["content"]
-        existing_test = file_info.get("existing_test", "")
-        coverage = file_info["coverage"]
+        target_function = file_info.get("target_function", "")
         
         prompt = f"""
-You are an expert Python developer and testing specialist. I need you to generate comprehensive test cases for a Python file with low test coverage.
+Buatkan satu fungsi unit test pytest untuk fungsi '{target_function}' di file '{filepath}'.
 
 File: {filepath}
-Current Coverage: {coverage}%
+Target Function: {target_function}
 
-Here's the source code:
+Source code:
 ```python
 {content}
-"""
-
-        if existing_test:
-            prompt += f"""
-Here's the existing test file (if any):
-```python
-{existing_test}
 ```
-"""
-        else:
-            prompt += "No existing test file found."
 
-        prompt += """
-Please generate a complete, production-ready test file that:
-1. Uses pytest framework
-2. Has comprehensive test coverage (aim for 90%+ coverage)
-3. Tests all functions, methods, and edge cases
-4. Includes proper mocking where needed
-5. Has clear test names and documentation
-6. Follows Python testing best practices
-7. Handles both success and error scenarios
-8. Uses appropriate fixtures and setup/teardown
+Instruksi:
+1. Buatkan HANYA satu fungsi test untuk fungsi '{target_function}'
+2. Test harus sederhana, tidak perlu mock berlebihan
+3. Fokus pada testing fungsi tersebut saja
+4. Gunakan pytest framework
+5. Pastikan test bisa berjalan dengan kode saat ini
 
-The test file should be named: test_""" + filepath.replace('app/', '') + """
+Output: Hanya kode fungsi test-nya saja (tanpa import, tanpa class, tanpa file penuh).
+Contoh format:
+```python
+def test_{target_function}_basic():
+    # test code here
+    pass
+```
 
-Return ONLY the complete test code without any explanations or markdown formatting.
+Return ONLY the test function code without any explanations or markdown formatting.
 """
         return prompt
     
@@ -298,13 +289,15 @@ Return ONLY the complete test code without any explanations or markdown formatti
             target_func = uncovered_funcs[0]
             logger.info(f"Generating test for {filepath} function {target_func}")
 
-            # Prompt: only one test function, focus, must be simple
-            prompt = (
-                f"Buatkan satu fungsi unit test pytest untuk fungsi '{target_func}' di file '{filepath}'. "
-                f"Test harus sederhana, tidak perlu mock berlebihan, dan cukup satu test function saja. "
-                f"Output hanya kode fungsi test-nya saja (tanpa import, tanpa class, tanpa file penuh)."
-            )
-            test_func_code = self.generate_test_with_gemini(prompt, filepath)
+            # Create file_info for generate_test_code
+            file_info = {
+                "filepath": filepath,
+                "content": self.get_file_content(filepath),
+                "target_function": target_func
+            }
+            
+            # Generate focused test using existing method
+            test_func_code = self.generate_test_code(file_info)
             if not test_func_code:
                 logger.error(f"Failed to generate test for {filepath}::{target_func}")
                 results.append({"file": filepath, "function": target_func, "success": False, "error": "No test generated"})
@@ -321,6 +314,15 @@ Return ONLY the complete test code without any explanations or markdown formatti
             logger.info(f"Saved test for {filepath}::{target_func} to {test_file_path}")
             results.append({"file": filepath, "function": target_func, "success": True, "test_file": str(test_file_path)})
         return results
+
+    def get_file_content(self, filepath: str) -> str:
+        """Get file content for test generation."""
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"Error reading {filepath}: {e}")
+            return ""
 
     def get_uncovered_functions(self, filepath: str, coverage_data: Dict) -> List[str]:
         """Return list of function names in the file that are not covered (dummy: return first function if any)."""
