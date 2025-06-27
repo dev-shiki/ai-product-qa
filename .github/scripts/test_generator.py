@@ -42,11 +42,17 @@ class TestGenerator:
         content = file_info["content"]
         target_function = file_info.get("target_function", "")
         
+        # Extract import info
+        clean_filepath = filepath.replace("app/", "").replace("/", ".").replace(".py", "")
+        import_path = f"app.{clean_filepath}"
+        
         prompt = f"""
 Buatkan satu fungsi unit test pytest untuk fungsi '{target_function}' di file '{filepath}'.
 
-File: {filepath}
-Target Function: {target_function}
+Project structure:
+- File: {filepath}
+- Target Function: {target_function}
+- Import path: from {import_path} import {target_function}
 
 Source code:
 ```python
@@ -55,20 +61,21 @@ Source code:
 
 Instruksi:
 1. Buatkan HANYA satu fungsi test untuk fungsi '{target_function}'
-2. Test harus sederhana, tidak perlu mock berlebihan
-3. Fokus pada testing fungsi tersebut saja
+2. Test harus sederhana dan fokus pada fungsi tersebut
+3. Jangan gunakan mock yang rumit, cukup test basic functionality
 4. Gunakan pytest framework
-5. Pastikan test bisa berjalan dengan kode saat ini
+5. JANGAN menambahkan import statement (sudah disediakan)
+6. HANYA return fungsi test saja
 
-Output: Hanya kode fungsi test-nya saja (tanpa import, tanpa class, tanpa file penuh).
-Contoh format:
+Output format yang diinginkan:
 ```python
 def test_{target_function}_basic():
-    # test code here
+    # Simple test for {target_function}
+    # Test basic functionality here
     pass
 ```
 
-Return ONLY the test function code without any explanations or markdown formatting.
+Return ONLY the test function code without import statements, explanations, or markdown formatting.
 """
         return prompt
     
@@ -305,11 +312,15 @@ Return ONLY the test function code without any explanations or markdown formatti
 
             # Save to flat test file with versioning
             test_file_path = self.get_next_test_file_path(module_name)
+            
+            # Fix import path: app/services/ai_service.py -> app.services.ai_service
+            clean_filepath = filepath.replace("app/", "").replace("/", ".").replace(".py", "")
+            import_path = f"app.{clean_filepath}"
+            
             with open(test_file_path, "w", encoding="utf-8") as f:
-                # Add import pytest and import target module
+                # Add proper imports
                 f.write(f"import pytest\n")
-                import_path = filepath.replace("/", ".").replace(".py", "")
-                f.write(f"from app.{import_path} import {target_func}\n\n")
+                f.write(f"from {import_path} import {target_func}\n\n")
                 f.write(test_func_code.strip() + "\n")
             logger.info(f"Saved test for {filepath}::{target_func} to {test_file_path}")
             results.append({"file": filepath, "function": target_func, "success": True, "test_file": str(test_file_path)})
@@ -325,14 +336,25 @@ Return ONLY the test function code without any explanations or markdown formatti
             return ""
 
     def get_uncovered_functions(self, filepath: str, coverage_data: Dict) -> List[str]:
-        """Return list of function names in the file that are not covered (dummy: return first function if any)."""
-        # TODO: Replace with real coverage analysis per function if available
-        # For now, just return all top-level function names
+        """Return list of function names in the file that are not covered - simplified to return first function."""
         import ast
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
-            return [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
+            
+            # Get all function and method names
+            functions = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    # Skip private methods and dunder methods for simplicity
+                    if not node.name.startswith('_'):
+                        functions.append(node.name)
+            
+            # For low coverage files, assume at least the first function needs testing
+            if functions:
+                return [functions[0]]  # Return first non-private function
+            else:
+                return []
         except Exception as e:
             logger.error(f"Error parsing {filepath}: {e}")
             return []
