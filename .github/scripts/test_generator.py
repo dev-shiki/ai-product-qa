@@ -90,55 +90,59 @@ class TestGenerator:
             return {"content": "", "imports": [], "classes": {}, "functions": []}
         
     def generate_test_prompt(self, file_info: Dict) -> str:
-        """Generate prompt untuk Gemini berdasarkan file info - fokus pada satu fungsi/class saja"""
+        """Generate prompt untuk Gemini - FOKUS PADA SATU FUNGSI SAJA"""
         filepath = file_info["filepath"]
         module_info = file_info["module_info"]
         target_item = file_info.get("target_item", "")
-        target_type = file_info.get("target_type", "function")  # "function" or "class"
+        target_type = file_info.get("target_type", "function")
         
         # Create import statement based on file structure
         clean_filepath = filepath.replace("app/", "").replace("/", ".").replace(".py", "")
         import_path = f"app.{clean_filepath}"
         
-        prompt = f"""
-Buatkan unit test pytest untuk {target_type} '{target_item}' di file '{filepath}'.
+        prompt = f"""Create unit test for single function: '{target_item}'
 
-File structure analysis:
-- File: {filepath}
-- Available classes: {list(module_info['classes'].keys())}
-- Available functions: {module_info['functions']}
-- Target {target_type}: {target_item}
+File: {filepath}
+Target: {target_type} '{target_item}'
+Import: from {import_path} import {target_item}
 
-Source code excerpt:
+Source code:
 ```python
-{module_info['content'][:2000]}...
+{module_info['content'][:1500]}...
 ```
 
-Instruksi:
-1. Buatkan test untuk {target_type} '{target_item}' yang BENAR-BENAR ADA di file
-2. Gunakan import yang tepat: from {import_path} import {target_item}
-3. Test harus sederhana dan realistic
-4. Jangan gunakan mock yang rumit
-5. Handle potential exceptions dengan try-catch
-6. HANYA return complete test file dengan import statements
+Instructions:
+1. Focus ONLY on {target_type} '{target_item}' - do not test others
+2. Create SIMPLE and REALISTIC tests
+3. Use correct import: `from {import_path} import {target_item}`
+4. Handle exceptions with try-catch
+5. Do not use complex mocks
+6. Test must be runnable directly
 
-Output format:
+Expected output:
 ```python
 import pytest
 from {import_path} import {target_item}
 
 def test_{target_item}_basic():
-    '''Test basic functionality of {target_item}'''
+    """Test basic functionality of {target_item}"""
     try:
-        # Simple test implementation here
-        result = {target_item}()  # or appropriate call
+        # Simple test implementation
+        result = {target_item}()  # Adjust based on actual function signature
         assert result is not None
     except Exception as e:
-        pytest.skip(f"Skipping test due to dependency: {{e}}")
+        pytest.skip(f"Test skipped due to dependency: {{e}}")
+
+def test_{target_item}_edge_cases():
+    """Test edge cases for {target_item}"""
+    try:
+        # Test with edge cases
+        pass
+    except Exception as e:
+        pytest.skip(f"Test skipped due to dependency: {{e}}")
 ```
 
-Return ONLY the complete test file code with proper imports.
-"""
+Return ONLY Python test code, no additional explanations."""
         return prompt
     
     def generate_test_code(self, file_info: Dict) -> Optional[str]:
@@ -265,7 +269,7 @@ Return ONLY the complete test file code with proper imports.
             return {"success": False, "error": str(e)}
     
     def process_coverage_report(self, report_file: str = "coverage_report.json") -> Dict:
-        """Process coverage report dan generate tests"""
+        """Process coverage report dan generate tests - FOCUS ON ONE FUNCTION ONLY"""
         if not Path(report_file).exists():
             logger.error(f"Coverage report not found: {report_file}")
             return {"error": "Coverage report not found"}
@@ -280,98 +284,134 @@ Return ONLY the complete test file code with proper imports.
             results = {
                 "processed_files": [],
                 "success_count": 0,
-                "error_count": 0
+                "error_count": 0,
+                "strategy": "single_function_focus"
             }
             
-            for file_info in report["lowest_coverage_files"]:
-                current_file = len(results["processed_files"]) + 1
-                total_files = len(report["lowest_coverage_files"])
-                logger.info(f"Processing {file_info['filepath']} ({current_file}/{total_files})")
-                
-                # Analyze module structure
-                module_info = self.analyze_module_structure(file_info['filepath'])
-                
-                # Determine what to test (prefer classes, then functions)
-                target_item = None
-                target_type = None
-                
-                if module_info['classes']:
-                    target_item = list(module_info['classes'].keys())[0]
-                    target_type = "class"
-                elif module_info['functions']:
-                    target_item = module_info['functions'][0]
-                    target_type = "function"
-                else:
-                    logger.warning(f"No testable items found in {file_info['filepath']}")
-                    file_result = {
-                        "filepath": file_info['filepath'],
-                        "coverage": file_info['coverage'],
-                        "test_generated": False,
-                        "error": "No testable items found"
-                    }
-                    results["processed_files"].append(file_result)
-                    results["error_count"] += 1
-                    continue
-                
-                # Create enhanced file_info for test generation
-                enhanced_file_info = {
+            # FOCUS: Only process the FIRST file with lowest coverage
+            if not report["lowest_coverage_files"]:
+                return {"error": "No files with low coverage found"}
+            
+            # Get only the first file (lowest coverage)
+            file_info = report["lowest_coverage_files"][0]
+            logger.info(f"🎯 FOCUSING ON SINGLE FILE: {file_info['filepath']}")
+            
+            # Analyze module structure
+            module_info = self.analyze_module_structure(file_info['filepath'])
+            
+            # FOCUS: Find the BEST candidate for testing (prioritize functions over classes)
+            target_item = None
+            target_type = None
+            
+            # Prefer simple functions first (easier to test)
+            if module_info['functions']:
+                # Get the first function that's not a test function
+                for func in module_info['functions']:
+                    if not func.startswith('test_') and not func.startswith('_'):
+                        target_item = func
+                        target_type = "function"
+                        break
+            
+            # If no suitable function, try classes
+            if not target_item and module_info['classes']:
+                target_item = list(module_info['classes'].keys())[0]
+                target_type = "class"
+            
+            if not target_item:
+                logger.warning(f"No suitable testable items found in {file_info['filepath']}")
+                file_result = {
                     "filepath": file_info['filepath'],
-                    "module_info": module_info,
-                    "target_item": target_item,
-                    "target_type": target_type
+                    "coverage": file_info['coverage'],
+                    "test_generated": False,
+                    "error": "No suitable testable items found",
+                    "strategy": "single_function_focus"
                 }
-                
-                # Generate test code
+                results["processed_files"].append(file_result)
+                results["error_count"] += 1
+                return results
+            
+            logger.info(f"🎯 TARGET: {target_type} '{target_item}' in {file_info['filepath']}")
+            
+            # Create enhanced file_info for test generation
+            enhanced_file_info = {
+                "filepath": file_info['filepath'],
+                "module_info": module_info,
+                "target_item": target_item,
+                "target_type": target_type,
+                "strategy": "single_function_focus"
+            }
+            
+            # Generate test code with retry logic
+            test_code = None
+            max_retries = 3
+            
+            for attempt in range(max_retries):
+                logger.info(f"🔄 Generating test (attempt {attempt + 1}/{max_retries})")
                 test_code = self.generate_test_code(enhanced_file_info)
                 
                 if test_code and self.validate_test_code(test_code):
-                    # Save test file
-                    if self.save_test_file(file_info['filepath'], test_code):
-                        # Run test to validate
-                        test_result = self.run_generated_test(file_info['filepath'])
-                        
-                        file_result = {
-                            "filepath": file_info['filepath'],
-                            "coverage": file_info['coverage'],
-                            "target_item": target_item,
-                            "target_type": target_type,
-                            "test_generated": True,
-                            "test_saved": True,
-                            "test_result": test_result
-                        }
-                        
-                        if test_result["success"]:
-                            results["success_count"] += 1
-                        else:
-                            results["error_count"] += 1
+                    logger.info(f"✅ Test code generated successfully on attempt {attempt + 1}")
+                    break
+                else:
+                    logger.warning(f"❌ Test generation failed on attempt {attempt + 1}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2)  # Wait before retry
+            
+            if test_code and self.validate_test_code(test_code):
+                # Save test file
+                if self.save_test_file(file_info['filepath'], test_code):
+                    # Run test to validate
+                    test_result = self.run_generated_test(file_info['filepath'])
+                    
+                    file_result = {
+                        "filepath": file_info['filepath'],
+                        "coverage": file_info['coverage'],
+                        "target_item": target_item,
+                        "target_type": target_type,
+                        "test_generated": True,
+                        "test_saved": True,
+                        "test_result": test_result,
+                        "strategy": "single_function_focus",
+                        "attempts": max_retries
+                    }
+                    
+                    if test_result["success"]:
+                        results["success_count"] += 1
+                        logger.info(f"🎉 SUCCESS: Test for {target_item} passed!")
                     else:
-                        file_result = {
-                            "filepath": file_info['filepath'],
-                            "coverage": file_info['coverage'],
-                            "target_item": target_item,
-                            "target_type": target_type,
-                            "test_generated": True,
-                            "test_saved": False,
-                            "error": "Failed to save test file"
-                        }
                         results["error_count"] += 1
+                        logger.warning(f"⚠️ Test for {target_item} failed but was generated")
                 else:
                     file_result = {
                         "filepath": file_info['filepath'],
                         "coverage": file_info['coverage'],
                         "target_item": target_item,
                         "target_type": target_type,
-                        "test_generated": False,
-                        "error": "Failed to generate valid test code"
+                        "test_generated": True,
+                        "test_saved": False,
+                        "error": "Failed to save test file",
+                        "strategy": "single_function_focus"
                     }
                     results["error_count"] += 1
-                
-                results["processed_files"].append(file_result)
-                
-                # Add delay to avoid rate limiting (progressive backoff)
-                delay = min(2 + (results["error_count"] * 0.5), 10)  # Max 10 seconds
-                logger.info(f"Waiting {delay}s before next API call...")
-                time.sleep(delay)
+            else:
+                file_result = {
+                    "filepath": file_info['filepath'],
+                    "coverage": file_info['coverage'],
+                    "target_item": target_item,
+                    "target_type": target_type,
+                    "test_generated": False,
+                    "error": f"Failed to generate valid test code after {max_retries} attempts",
+                    "strategy": "single_function_focus"
+                }
+                results["error_count"] += 1
+            
+            results["processed_files"].append(file_result)
+            
+            # Summary
+            logger.info(f"📊 SINGLE FUNCTION FOCUS COMPLETE:")
+            logger.info(f"   File: {file_info['filepath']}")
+            logger.info(f"   Target: {target_type} '{target_item}'")
+            logger.info(f"   Success: {results['success_count']}, Errors: {results['error_count']}")
             
             return results
             
