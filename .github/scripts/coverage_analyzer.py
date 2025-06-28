@@ -24,15 +24,15 @@ class CoverageAnalyzer:
         self.xml_file = Path("coverage.xml")
         
     def run_coverage(self) -> bool:
-        """Menjalankan coverage test menggunakan coverage CLI (seperti codecov workflow)"""
+        """Menjalankan coverage test menggunakan coverage CLI (SAMA DENGAN CODECOV)"""
         try:
-            # Step 1: Run tests with coverage
-            logger.info("Running tests with coverage...")
+            # Step 1: Run tests with coverage (EXACTLY like codecov workflow)
+            logger.info("Running tests with coverage (codecov style)...")
             cmd_run = [
                 "coverage", "run", 
-                "--source=" + str(self.source_dir),
+                "--source=app",  # Same as codecov
                 "-m", "pytest", 
-                str(self.test_dir),
+                "tests/",  # Add slash like codecov
                 "-v"
             ]
             
@@ -43,7 +43,7 @@ class CoverageAnalyzer:
                 logger.warning(f"Coverage run had issues: {result_run.stderr}")
                 # Continue anyway to check if coverage data was generated
             
-            # Step 2: Generate coverage report
+            # Step 2: Generate coverage report (same as codecov)
             logger.info("Generating coverage report...")
             cmd_report = ["coverage", "report", "-m"]
             result_report = subprocess.run(cmd_report, capture_output=True, text=True, timeout=60)
@@ -54,7 +54,7 @@ class CoverageAnalyzer:
             else:
                 logger.warning(f"Coverage report generation had issues: {result_report.stderr}")
             
-            # Step 3: Generate XML report
+            # Step 3: Generate XML report (same as codecov)
             logger.info("Generating XML coverage report...")
             cmd_xml = ["coverage", "xml"]
             result_xml = subprocess.run(cmd_xml, capture_output=True, text=True, timeout=60)
@@ -79,7 +79,7 @@ class CoverageAnalyzer:
             return False
     
     def parse_coverage_xml(self) -> Dict[str, float]:
-        """Parse coverage XML dan return dict dengan file dan coverage percentage"""
+        """Parse coverage XML dan return dict dengan file dan coverage percentage (SAMA DENGAN CODECOV)"""
         if not self.xml_file.exists():
             logger.error("Coverage XML file not found")
             return {}
@@ -90,19 +90,16 @@ class CoverageAnalyzer:
             
             coverage_data = {}
             
-            # Parse coverage data from XML
+            # Parse coverage data from XML (focus on app/ files like codecov)
             for package in root.findall(".//package"):
                 package_name = package.get("name", "")
-                if package_name:
-                    # Convert absolute paths to relative paths
-                    if package_name.startswith("/"):
-                        package_name = package_name[1:]
-                    
+                if package_name and package_name.startswith("app"):
                     # Get line rate for the package
                     line_rate = package.get("line-rate", "0")
                     try:
                         lines_covered = float(line_rate) * 100
                         coverage_data[package_name] = lines_covered
+                        logger.info(f"Package coverage: {package_name} = {lines_covered:.2f}%")
                     except (ValueError, TypeError):
                         logger.warning(f"Invalid line-rate for {package_name}: {line_rate}")
                         coverage_data[package_name] = 0.0
@@ -110,16 +107,13 @@ class CoverageAnalyzer:
                 # Also check individual classes within packages
                 for class_elem in package.findall(".//class"):
                     filename = class_elem.get("filename", "")
-                    if filename:
-                        # Convert to relative path
-                        if filename.startswith("/"):
-                            filename = filename[1:]
-                        
+                    if filename and filename.startswith("app"):
                         # Get coverage percentage
                         line_rate = class_elem.get("line-rate", "0")
                         try:
                             lines_covered = float(line_rate) * 100
                             coverage_data[filename] = lines_covered
+                            logger.info(f"File coverage: {filename} = {lines_covered:.2f}%")
                         except (ValueError, TypeError):
                             logger.warning(f"Invalid line-rate for {filename}: {line_rate}")
                             coverage_data[filename] = 0.0
