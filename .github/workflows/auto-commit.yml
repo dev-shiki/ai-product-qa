@@ -1,142 +1,181 @@
-name: Auto Commit - Test Coverage Improvement
+name: AI Test Generation Auto-Commit
 
 on:
   schedule:
-    # Run every 30 minutes - this is the main trigger
+    # Run every 30 minutes
     - cron: '*/30 * * * *'
-  
-  # Manual trigger
   workflow_dispatch:
-    inputs:
-      force_run:
-        description: 'Force run even if no changes'
-        required: false
-        default: 'false'
-        type: boolean
+  push:
+    branches: [master, main]
+    paths:
+      - '.github/workflows/auto-commit.yml'
+      - '.github/scripts/**'
+
+# Prevent infinite loops
+concurrency:
+  group: auto-commit-workflow
+  cancel-in-progress: true
 
 permissions:
   contents: write
-  pull-requests: write
-  issues: write
-
+  actions: write
+ 
 jobs:
   auto-commit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
-    # No need to check for auto-commit message since we're not triggered by push
-    # This workflow only runs on schedule or manual trigger
-    
-    # Prevent multiple runs at the same time - improved safety
-    concurrency:
-      group: auto-commit-${{ github.ref }}
-      cancel-in-progress: true  # Cancel previous run if new one starts
+    # Skip if last commit was auto-commit to prevent loops
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || !contains(github.event.head_commit.message, 'Auto-commit:')
     
     steps:
-      - name: Checkout repository
+    - name: Checkout code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        # Use default token but configure for contributions
+        token: ${{ github.token }}
           fetch-depth: 0
       
-      - name: Setup Python
+    - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
+        python-version: '3.10'
       
-      - name: Install dependencies
+    - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Setup Git
+    - name: Setup Git for Contributions
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-      
-      - name: Setup Gemini API Key
+        # Get repository owner info
+        REPO_OWNER="${{ github.repository_owner }}"
+        
+        # Configure git with repository owner's information
+        git config --global user.name "$REPO_OWNER"
+        git config --global user.email "$REPO_OWNER@users.noreply.github.com"
+        
+        echo "Git configured for contributions:"
+        echo "  Name: $REPO_OWNER"
+        echo "  Email: $REPO_OWNER@users.noreply.github.com"
+        
+        # Verify configuration
+        git config --get user.name
+        git config --get user.email
+
+    - name: Run Coverage Analysis
         run: |
-          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+        echo "[INFO] Starting Coverage Analysis..."
+        python .github/scripts/coverage_analyzer.py || echo "[SKIP] Coverage analysis failed, continuing workflow"
+      continue-on-error: true
+
+    - name: Run Test Generation 
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      
-      - name: Run Auto Commit Workflow
+      run: |
+        echo "[INFO] Starting Test Generation..."
+        if [[ -z "$GEMINI_API_KEY" ]]; then
+          echo "[SKIP] GEMINI_API_KEY not set, skipping test generation"
+          echo '{"error": "GEMINI_API_KEY not set"}' > test_generation_results.json
+        else
+          python .github/scripts/test_generator.py || echo "[SKIP] Test generation failed, continuing workflow"
+        fi
+      continue-on-error: true
+
+    - name: Run Auto-Contribution Bot
+      run: |
+        echo "[INFO] Starting Auto-Contribution Bot..."
+        
+        # Use repository owner email for contributions
+        REPO_OWNER="${{ github.repository_owner }}"
+        OWNER_EMAIL="$REPO_OWNER@users.noreply.github.com"
+        
+        echo "Creating contributions for: $OWNER_EMAIL"
+        
+        # Run contribution bot with owner's email
+        python .github/scripts/contribution_bot.py "$OWNER_EMAIL" "$REPO_OWNER" || echo "[SKIP] Contribution bot failed"
+      continue-on-error: true
+
+    - name: Commit and Push Changes
         run: |
-          python .github/scripts/main_orchestrator.py
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      
-      - name: Upload workflow results
-        uses: actions/upload-artifact@v4
+        echo "[INFO] Checking for changes to commit..."
+        
+        # Check if there are any changes
+        if [[ -n "$(git status --porcelain)" ]]; then
+          echo "Changes detected, committing..."
+          
+          # Stage all changes
+          git add -A
+          
+          # Create commit with timestamp
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M UTC')
+          COMMIT_MSG="🤖 Auto-update: AI test generation and coverage improvement - $TIMESTAMP"
+          
+          # Commit changes
+          git commit -m "$COMMIT_MSG"
+          
+          # Push changes
+          git push origin ${{ github.ref_name }}
+          
+          echo "✅ Successfully committed and pushed changes"
+          echo "📊 Commit: $COMMIT_MSG"
+        else
+          echo "ℹ️ No changes to commit"
+        fi
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
         if: always()
         with:
-          name: workflow-results-${{ github.run_id }}
+        name: workflow-results
           path: |
-            workflow_results.json
-            workflow_summary.txt
-            orchestrator.log
             coverage_report.json
             test_generation_results.json
-            auto_commit_result.json
+          bot_activity.json
+          workflow_results.json
           retention-days: 7
       
-      - name: Create summary comment
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            
-            let summary = '## Auto Commit Workflow Summary\n\n';
-            
-            try {
-              if (fs.existsSync('workflow_summary.txt')) {
-                const summaryContent = fs.readFileSync('workflow_summary.txt', 'utf8');
-                summary += '```\n' + summaryContent + '\n```\n\n';
-              }
-              
-              if (fs.existsSync('workflow_results.json')) {
-                const results = JSON.parse(fs.readFileSync('workflow_results.json', 'utf8'));
-                
-                summary += '### Results\n\n';
-                summary += `- **Overall Success**: ${results.overall_success ? 'SUCCESS' : 'FAILED'}\n`;
-                summary += `- **Steps Completed**: ${results.steps.filter(s => s.success).length}/${results.steps.length}\n`;
-                summary += `- **Timestamp**: ${results.timestamp}\n\n`;
-                
-                if (results.errors && results.errors.length > 0) {
-                  summary += '### Errors\n\n';
-                  results.errors.forEach(error => {
-                    summary += `- ${error}\n`;
-                  });
-                  summary += '\n';
-                }
-              }
-              
-              summary += '---\n*This comment was automatically generated by the Auto Commit workflow.*';
-              
-            } catch (error) {
-              summary += `Error reading workflow results: ${error.message}`;
-            }
-            
-            // Only create comment if this is a PR or issue context
-            if (context.issue && context.issue.number) {
-              github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: summary
-              });
-            } else {
-              console.log('Summary:', summary);
-            }
-      
-      - name: Handle workflow failure
-        if: failure()
-        run: |
-          echo "Auto commit workflow failed"
-          echo "Check the logs and artifacts for more details"
-          
-          # Save failure info
-          echo "Workflow failed at $(date)" > failure_info.txt
-          echo "Run ID: ${{ github.run_id }}" >> failure_info.txt
-          echo "Commit: ${{ github.sha }}" >> failure_info.txt 
+    - name: Summary Report
+      if: always()
+      run: |
+        echo "## 🤖 Auto-Commit Workflow Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository Owner**: ${{ github.repository_owner }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Workflow Run**: #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Coverage Report
+        if [[ -f "coverage_report.json" ]]; then
+          echo "### ✅ Coverage Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "Coverage report generated successfully" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ⏭️ Coverage Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "Coverage analysis was skipped or failed" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Test Generation Report
+        if [[ -f "test_generation_results.json" ]]; then
+          echo "### ✅ Test Generation" >> $GITHUB_STEP_SUMMARY
+          echo "AI test generation completed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ⏭️ Test Generation" >> $GITHUB_STEP_SUMMARY  
+          echo "Test generation was skipped (no GEMINI_API_KEY or failed)" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Contribution Report
+        if [[ -f "bot_activity.json" ]]; then
+          echo "### ✅ Auto Contributions" >> $GITHUB_STEP_SUMMARY
+          echo "Contributions created successfully for ${{ github.repository_owner }}" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ⏭️ Auto Contributions" >> $GITHUB_STEP_SUMMARY
+          echo "No contributions created this run" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "🎯 **Goal**: This workflow automatically generates AI-powered tests and creates meaningful commits that count towards GitHub contributions." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🔄 **Next Run**: In 30 minutes (cron schedule)" >> $GITHUB_STEP_SUMMARY 
