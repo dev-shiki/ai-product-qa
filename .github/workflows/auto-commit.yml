@@ -5,11 +5,6 @@ on:
     # Run every 30 minutes
     - cron: '*/30 * * * *'
   workflow_dispatch:
-  push:
-    branches: [master, main]
-    paths:
-      - '.github/workflows/auto-commit.yml'
-      - '.github/scripts/**'
 
 # Prevent infinite loops
 concurrency:
