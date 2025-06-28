@@ -69,7 +69,7 @@ class CoverageAnalyzer:
                     return False
             else:
                 logger.error(f"XML generation failed: {result_xml.stderr}")
-                    return False
+                return False
             
         except subprocess.TimeoutExpired:
             logger.error("Coverage analysis timed out after 5 minutes")
