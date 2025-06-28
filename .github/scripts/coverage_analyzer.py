@@ -26,6 +26,12 @@ class CoverageAnalyzer:
     def run_coverage(self) -> bool:
         """Menjalankan coverage test menggunakan coverage CLI (SAMA DENGAN CODECOV)"""
         try:
+            # Check if coverage.xml already exists (from previous pytest run)
+            if self.xml_file.exists():
+                logger.info("coverage.xml already exists, skipping coverage run to avoid overwriting existing data")
+                logger.info(f"Using existing coverage file: {self.xml_file}")
+                return True
+            
             # Step 1: Run tests with coverage (EXACTLY like codecov workflow)
             logger.info("Running tests with coverage (codecov style)...")
             cmd_run = [

@@ -44,6 +44,14 @@ jobs:
         git config --global user.email "$REPO_OWNER@users.noreply.github.com"
         echo "Git configured for contributions: $REPO_OWNER"
 
+    - name: Run Tests with Coverage (Codecov Style)
+      run: |
+        echo "[INFO] Running tests with coverage (codecov style)..."
+        coverage run --source=app -m pytest tests/ -v
+        coverage report -m
+        coverage xml
+        echo "[INFO] Coverage data generated successfully"
+
     - name: Run Coverage Analysis
       run: |
         echo "[INFO] Starting Coverage Analysis..."
