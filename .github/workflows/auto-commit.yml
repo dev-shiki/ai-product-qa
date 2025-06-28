@@ -14,163 +14,95 @@ concurrency:
 permissions:
   contents: write
   actions: write
- 
+
 jobs:
   auto-commit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     
-    # Skip if last commit was auto-commit to prevent loops
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || !contains(github.event.head_commit.message, 'Auto-commit:')
-    
     steps:
     - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-        # Use default token but configure for contributions
+      uses: actions/checkout@v4
+      with:
         token: ${{ github.token }}
-          fetch-depth: 0
+        fetch-depth: 0
       
     - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
+      uses: actions/setup-python@v4
+      with:
         python-version: '3.10'
       
     - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
       
     - name: Setup Git for Contributions
-        run: |
-        # Get repository owner info
+      run: |
         REPO_OWNER="${{ github.repository_owner }}"
-        
-        # Configure git with repository owner's information
         git config --global user.name "$REPO_OWNER"
         git config --global user.email "$REPO_OWNER@users.noreply.github.com"
-        
-        echo "Git configured for contributions:"
-        echo "  Name: $REPO_OWNER"
-        echo "  Email: $REPO_OWNER@users.noreply.github.com"
-        
-        # Verify configuration
-        git config --get user.name
-        git config --get user.email
+        echo "Git configured for contributions: $REPO_OWNER"
 
     - name: Run Coverage Analysis
-        run: |
+      run: |
         echo "[INFO] Starting Coverage Analysis..."
-        python .github/scripts/coverage_analyzer.py || echo "[SKIP] Coverage analysis failed, continuing workflow"
+        python .github/scripts/coverage_analyzer.py || echo "[SKIP] Coverage analysis failed"
       continue-on-error: true
 
     - name: Run Test Generation 
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
         echo "[INFO] Starting Test Generation..."
         if [[ -z "$GEMINI_API_KEY" ]]; then
-          echo "[SKIP] GEMINI_API_KEY not set, skipping test generation"
+          echo "[SKIP] GEMINI_API_KEY not set"
           echo '{"error": "GEMINI_API_KEY not set"}' > test_generation_results.json
         else
-          python .github/scripts/test_generator.py || echo "[SKIP] Test generation failed, continuing workflow"
+          python .github/scripts/test_generator.py || echo "[SKIP] Test generation failed"
         fi
       continue-on-error: true
 
     - name: Run Auto-Contribution Bot
       run: |
         echo "[INFO] Starting Auto-Contribution Bot..."
-        
-        # Use repository owner email for contributions
         REPO_OWNER="${{ github.repository_owner }}"
         OWNER_EMAIL="$REPO_OWNER@users.noreply.github.com"
-        
-        echo "Creating contributions for: $OWNER_EMAIL"
-        
-        # Run contribution bot with owner's email
         python .github/scripts/contribution_bot.py "$OWNER_EMAIL" "$REPO_OWNER" || echo "[SKIP] Contribution bot failed"
       continue-on-error: true
 
     - name: Commit and Push Changes
-        run: |
+      run: |
         echo "[INFO] Checking for changes to commit..."
-        
-        # Check if there are any changes
         if [[ -n "$(git status --porcelain)" ]]; then
           echo "Changes detected, committing..."
-          
-          # Stage all changes
           git add -A
-          
-          # Create commit with timestamp
           TIMESTAMP=$(date '+%Y-%m-%d %H:%M UTC')
           COMMIT_MSG="🤖 Auto-update: AI test generation and coverage improvement - $TIMESTAMP"
-          
-          # Commit changes
           git commit -m "$COMMIT_MSG"
-          
-          # Push changes
           git push origin ${{ github.ref_name }}
-          
           echo "✅ Successfully committed and pushed changes"
-          echo "📊 Commit: $COMMIT_MSG"
         else
           echo "ℹ️ No changes to commit"
         fi
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v3
-        if: always()
-        with:
+      if: always()
+      with:
         name: workflow-results
-          path: |
-            coverage_report.json
-            test_generation_results.json
+        path: |
+          coverage_report.json
+          test_generation_results.json
           bot_activity.json
           workflow_results.json
-          retention-days: 7
+        retention-days: 7
       
     - name: Summary Report
       if: always()
       run: |
         echo "## 🤖 Auto-Commit Workflow Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Repository Owner**: ${{ github.repository_owner }}" >> $GITHUB_STEP_SUMMARY
         echo "**Workflow Run**: #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
         echo "**Timestamp**: $(date)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Coverage Report
-        if [[ -f "coverage_report.json" ]]; then
-          echo "### ✅ Coverage Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "Coverage report generated successfully" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "### ⏭️ Coverage Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "Coverage analysis was skipped or failed" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Test Generation Report
-        if [[ -f "test_generation_results.json" ]]; then
-          echo "### ✅ Test Generation" >> $GITHUB_STEP_SUMMARY
-          echo "AI test generation completed" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "### ⏭️ Test Generation" >> $GITHUB_STEP_SUMMARY  
-          echo "Test generation was skipped (no GEMINI_API_KEY or failed)" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Contribution Report
-        if [[ -f "bot_activity.json" ]]; then
-          echo "### ✅ Auto Contributions" >> $GITHUB_STEP_SUMMARY
-          echo "Contributions created successfully for ${{ github.repository_owner }}" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "### ⏭️ Auto Contributions" >> $GITHUB_STEP_SUMMARY
-          echo "No contributions created this run" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "🎯 **Goal**: This workflow automatically generates AI-powered tests and creates meaningful commits that count towards GitHub contributions." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "🔄 **Next Run**: In 30 minutes (cron schedule)" >> $GITHUB_STEP_SUMMARY 
+        echo "🎯 **Goal**: Auto-generate tests and create meaningful commits for GitHub contributions" >> $GITHUB_STEP_SUMMARY 
