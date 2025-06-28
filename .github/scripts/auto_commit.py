@@ -232,7 +232,21 @@ class AutoCommitter:
             
             current_branch = result.stdout.strip()
             
+            # First, try to pull latest changes to avoid conflicts
+            logger.info(f"Pulling latest changes from origin/{current_branch}")
+            pull_result = subprocess.run(
+                ["git", "pull", "origin", current_branch],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if pull_result.returncode != 0:
+                logger.warning(f"Git pull failed (this might be normal if no remote changes): {pull_result.stderr}")
+                # Continue anyway, as this might be a new repository or no remote changes
+            
             # Push to remote
+            logger.info(f"Pushing to origin/{current_branch}")
             result = subprocess.run(
                 ["git", "push", "origin", current_branch],
                 capture_output=True,
@@ -244,7 +258,7 @@ class AutoCommitter:
                 logger.error(f"Git push failed: {result.stderr}")
                 return False
             
-            logger.info(f"Pushed to origin/{current_branch}")
+            logger.info(f"Successfully pushed to origin/{current_branch}")
             return True
             
         except subprocess.TimeoutExpired:
@@ -269,12 +283,12 @@ class AutoCommitter:
             changed_files = self.get_git_status()
             
             if not changed_files:
-            logger.info("No changes to commit")
-            return {
-                "success": True,
-                "message": "No changes to commit",
+                logger.info("No changes to commit")
+                return {
+                    "success": True,
+                    "message": "No changes to commit",
                     "files_changed": 0
-            }
+                }
         
             logger.info(f"Found {len(changed_files)} changes to commit")
         
@@ -287,18 +301,18 @@ class AutoCommitter:
             # Stage changes
             logger.info("Running git command: git add .")
             if not self.stage_changes():
-            return {
-                "success": False,
+                return {
+                    "success": False,
                     "error": "Failed to stage changes"
-            }
+                }
         
             # Commit changes
             logger.info(f"Running git command: git commit -m {commit_message}")
             if not self.commit_changes(commit_message):
-            return {
-                "success": False,
+                return {
+                    "success": False,
                     "error": "Failed to commit changes"
-            }
+                }
         
             # Push changes
             logger.info("Running git command: git branch --show-current")
@@ -311,7 +325,7 @@ class AutoCommitter:
             
             # Success
             result = {
-            "success": True,
+                "success": True,
                 "message": commit_message,
                 "files_changed": len(changed_files),
                 "categories": categories
@@ -334,14 +348,14 @@ class AutoCommitter:
 
 def main():
     """Main function"""
-        committer = AutoCommitter()
+    committer = AutoCommitter()
     result = committer.auto_commit()
         
-        if result["success"]:
+    if result["success"]:
         print(f"\n[SUCCESS] Auto commit successful!")
-            print(f"Message: {result['message']}")
+        print(f"Message: {result['message']}")
         print(f"Files changed: {result['files_changed']}")
-        else:
+    else:
         print(f"\n[FAILED] Auto commit failed: {result.get('error', 'Unknown error')}")
         sys.exit(1)
 
