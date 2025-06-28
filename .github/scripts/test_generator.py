@@ -57,7 +57,7 @@ class TestGenerator:
             in_class = False
             indent_level = 0
             
-            for line in lines:
+            for i, line in enumerate(lines):
                 stripped = line.strip()
                 
                 # Skip comments and empty lines
@@ -76,22 +76,45 @@ class TestGenerator:
                     classes[class_name] = {
                         'name': class_name,
                         'methods': [],
-                        'line': lines.index(line) + 1
+                        'line': i + 1
                     }
                     class_methods[class_name] = []
                 
                 # Detect function definitions
                 elif stripped.startswith('def '):
-                    func_name = stripped.split('def ')[1].split('(')[0].strip()
+                    func_def = stripped.split('def ')[1]
+                    func_name = func_def.split('(')[0].strip()
+                    
+                    # Extract parameters if possible
+                    params = []
+                    if '(' in func_def and ')' in func_def:
+                        param_part = func_def.split('(', 1)[1].split(')')[0]
+                        if param_part.strip():
+                            # Simple parameter parsing
+                            for param in param_part.split(','):
+                                param = param.strip()
+                                if param and param != 'self':
+                                    # Remove type hints if present
+                                    if ':' in param:
+                                        param = param.split(':')[0].strip()
+                                    params.append(param)
                     
                     if in_class and current_class:
                         # This is a class method
                         class_methods[current_class].append(func_name)
-                        classes[current_class]['methods'].append(func_name)
+                        classes[current_class]['methods'].append({
+                            'name': func_name,
+                            'params': params,
+                            'line': i + 1
+                        })
                     else:
                         # This is a standalone function
                         if not func_name.startswith('_') and not func_name.startswith('test_'):
-                            functions.append(func_name)
+                            functions.append({
+                                'name': func_name,
+                                'params': params,
+                                'line': i + 1
+                            })
                 
                 # Detect end of class (when indentation decreases)
                 elif in_class and current_class:
@@ -129,18 +152,35 @@ class TestGenerator:
         target_item = file_info.get("target_item", "")
         target_type = file_info.get("target_type", "function")
         target_class = file_info.get("target_class", "")
+        target_params = file_info.get("target_params", [])
         import_statement = file_info.get("import_statement", "")
         
-        # Determine how to call the target
+        # Determine how to call the target with proper parameters
         if target_type == "method" and target_class:
-            call_statement = f"{target_class}().{target_item}()"
+            # For class methods, create instance and call method
+            if target_params:
+                param_str = ", ".join([f'"{param}_value"' for param in target_params])
+                call_statement = f"{target_class}().{target_item}({param_str})"
+            else:
+                call_statement = f"{target_class}().{target_item}()"
         else:
-            call_statement = f"{target_item}()"
+            # For standalone functions
+            if target_params:
+                param_str = ", ".join([f'"{param}_value"' for param in target_params])
+                call_statement = f"{target_item}({param_str})"
+            else:
+                call_statement = f"{target_item}()"
+        
+        # Create parameter examples for the prompt
+        param_examples = ""
+        if target_params:
+            param_examples = f"\nParameters: {', '.join(target_params)}"
+            param_examples += "\nExample values: " + ", ".join([f'"{param}_value"' for param in target_params])
         
         prompt = f"""Create unit test for single {target_type}: '{target_item}'
 
 File: {filepath}
-Target: {target_type} '{target_item}'
+Target: {target_type} '{target_item}'{param_examples}
 Import: {import_statement}
 Call: {call_statement}
 
@@ -151,11 +191,12 @@ Source code:
 
 Instructions:
 1. Focus ONLY on {target_type} '{target_item}' - do not test others
-2. Create SIMPLE and REALISTIC tests
+2. Create SIMPLE and REALISTIC tests with proper parameters
 3. Use correct import: {import_statement}
 4. Handle exceptions with try-catch
 5. Do not use complex mocks
 6. Test must be runnable directly
+7. Use realistic parameter values based on the function signature
 
 Expected output:
 ```python
@@ -171,7 +212,7 @@ def test_{target_item}_basic():
 
 def test_{target_item}_edge_cases():
     try:
-        # Test with edge cases
+        # Test with edge cases or different parameter values
         pass
     except Exception as e:
         pytest.skip(f"Test skipped due to dependency: {{e}}")
@@ -338,15 +379,17 @@ Return ONLY Python test code, no additional explanations."""
             target_item = None
             target_type = None
             target_class = None
+            target_params = []
             import_statement = None
             
             # Prefer simple functions first (easier to test)
             if module_info['functions']:
                 # Get the first function that's not a test function
                 for func in module_info['functions']:
-                    if not func.startswith('test_') and not func.startswith('_'):
-                        target_item = func
+                    if not func['name'].startswith('test_') and not func['name'].startswith('_'):
+                        target_item = func['name']
                         target_type = "function"
+                        target_params = func['params']
                         # For standalone functions, import directly
                         clean_filepath = file_info['filepath'].replace("app/", "").replace("/", ".").replace(".py", "")
                         import_statement = f"from app.{clean_filepath} import {target_item}"
@@ -358,10 +401,11 @@ Return ONLY Python test code, no additional explanations."""
                     if class_info['methods']:
                         # Get the first public method
                         for method in class_info['methods']:
-                            if not method.startswith('_') and not method.startswith('test_'):
-                                target_item = method
+                            if not method['name'].startswith('_') and not method['name'].startswith('test_'):
+                                target_item = method['name']
                                 target_type = "method"
                                 target_class = class_name
+                                target_params = method['params']
                                 # For class methods, import the class
                                 clean_filepath = file_info['filepath'].replace("app/", "").replace("/", ".").replace(".py", "")
                                 import_statement = f"from app.{clean_filepath} import {class_name}"
@@ -385,6 +429,7 @@ Return ONLY Python test code, no additional explanations."""
             logger.info(f"🎯 TARGET: {target_type} '{target_item}' in {file_info['filepath']}")
             if target_class:
                 logger.info(f"🎯 CLASS: {target_class}")
+            logger.info(f"🎯 PARAMS: {target_params}")
             logger.info(f"🎯 IMPORT: {import_statement}")
             
             # Create enhanced file_info for test generation
@@ -394,6 +439,7 @@ Return ONLY Python test code, no additional explanations."""
                 "target_item": target_item,
                 "target_type": target_type,
                 "target_class": target_class,
+                "target_params": target_params,
                 "import_statement": import_statement,
                 "strategy": "single_function_focus"
             }
