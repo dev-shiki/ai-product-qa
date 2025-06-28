@@ -40,71 +40,109 @@ class TestGenerator:
         logger.info(f"Using Gemini model: {TEST_GENERATION_SETTINGS['model']}")
         
     def analyze_module_structure(self, filepath: str) -> Dict:
-        """Analyze module to get accurate class and function information"""
+        """Analyze module structure untuk mendapatkan info yang lebih detail"""
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            tree = ast.parse(content)
+            # Parse content untuk mendapatkan struktur yang lebih detail
+            lines = content.split('\n')
             
-            # Get imports to understand dependencies
-            imports = []
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        imports.append(alias.name)
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module:
-                        for alias in node.names:
-                            imports.append(f"{node.module}.{alias.name}")
-            
-            # Get classes and their methods
             classes = {}
             functions = []
+            imports = []
+            class_methods = {}
             
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
-                    class_methods = []
-                    for item in node.body:
-                        if isinstance(item, ast.FunctionDef):
-                            # Skip private methods
-                            if not item.name.startswith('_'):
-                                class_methods.append(item.name)
-                    classes[node.name] = class_methods
-                elif isinstance(node, ast.FunctionDef):
-                    # Only top-level functions (not inside classes)
-                    parent = getattr(node, 'parent', None)
-                    if not hasattr(node, 'parent') or not isinstance(getattr(node, 'parent', None), ast.ClassDef):
-                        if not node.name.startswith('_'):
-                            functions.append(node.name)
+            current_class = None
+            in_class = False
+            indent_level = 0
+            
+            for line in lines:
+                stripped = line.strip()
+                
+                # Skip comments and empty lines
+                if stripped.startswith('#') or not stripped:
+                    continue
+                
+                # Detect imports
+                if stripped.startswith('import ') or stripped.startswith('from '):
+                    imports.append(stripped)
+                
+                # Detect class definitions
+                elif stripped.startswith('class '):
+                    class_name = stripped.split('class ')[1].split('(')[0].split(':')[0].strip()
+                    current_class = class_name
+                    in_class = True
+                    classes[class_name] = {
+                        'name': class_name,
+                        'methods': [],
+                        'line': lines.index(line) + 1
+                    }
+                    class_methods[class_name] = []
+                
+                # Detect function definitions
+                elif stripped.startswith('def '):
+                    func_name = stripped.split('def ')[1].split('(')[0].strip()
+                    
+                    if in_class and current_class:
+                        # This is a class method
+                        class_methods[current_class].append(func_name)
+                        classes[current_class]['methods'].append(func_name)
+                    else:
+                        # This is a standalone function
+                        if not func_name.startswith('_') and not func_name.startswith('test_'):
+                            functions.append(func_name)
+                
+                # Detect end of class (when indentation decreases)
+                elif in_class and current_class:
+                    if line and not line.startswith(' ') and not line.startswith('\t'):
+                        in_class = False
+                        current_class = None
+            
+            # Get the actual content for context
+            content_preview = content[:2000] if len(content) > 2000 else content
             
             return {
-                "content": content,
-                "imports": imports,
-                "classes": classes,
-                "functions": functions
+                'classes': classes,
+                'functions': functions,
+                'imports': imports,
+                'class_methods': class_methods,
+                'content': content_preview,
+                'filepath': filepath
             }
             
         except Exception as e:
-            logger.error(f"Error analyzing {filepath}: {e}")
-            return {"content": "", "imports": [], "classes": {}, "functions": []}
+            logger.error(f"Error analyzing module structure for {filepath}: {e}")
+            return {
+                'classes': {},
+                'functions': [],
+                'imports': [],
+                'class_methods': {},
+                'content': '',
+                'filepath': filepath
+            }
         
     def generate_test_prompt(self, file_info: Dict) -> str:
-        """Generate prompt untuk Gemini - FOKUS PADA SATU FUNGSI SAJA"""
+        """Generate prompt untuk Gemini - FOKUS PADA SATU FUNGSI/METHOD SAJA"""
         filepath = file_info["filepath"]
         module_info = file_info["module_info"]
         target_item = file_info.get("target_item", "")
         target_type = file_info.get("target_type", "function")
+        target_class = file_info.get("target_class", "")
+        import_statement = file_info.get("import_statement", "")
         
-        # Create import statement based on file structure
-        clean_filepath = filepath.replace("app/", "").replace("/", ".").replace(".py", "")
-        import_path = f"app.{clean_filepath}"
+        # Determine how to call the target
+        if target_type == "method" and target_class:
+            call_statement = f"{target_class}().{target_item}()"
+        else:
+            call_statement = f"{target_item}()"
         
-        prompt = f"""Create unit test for single function: '{target_item}'
+        prompt = f"""Create unit test for single {target_type}: '{target_item}'
 
 File: {filepath}
 Target: {target_type} '{target_item}'
-Import: from {import_path} import {target_item}
+Import: {import_statement}
+Call: {call_statement}
 
 Source code:
 ```python
@@ -114,7 +152,7 @@ Source code:
 Instructions:
 1. Focus ONLY on {target_type} '{target_item}' - do not test others
 2. Create SIMPLE and REALISTIC tests
-3. Use correct import: `from {import_path} import {target_item}`
+3. Use correct import: {import_statement}
 4. Handle exceptions with try-catch
 5. Do not use complex mocks
 6. Test must be runnable directly
@@ -122,17 +160,18 @@ Instructions:
 Expected output:
 ```python
 import pytest
-from {import_path} import {target_item}
+{import_statement}
 
 def test_{target_item}_basic():
     try:
-        result = {target_item}()
+        result = {call_statement}
         assert result is not None
     except Exception as e:
         pytest.skip(f"Test skipped due to dependency: {{e}}")
 
 def test_{target_item}_edge_cases():
     try:
+        # Test with edge cases
         pass
     except Exception as e:
         pytest.skip(f"Test skipped due to dependency: {{e}}")
@@ -298,6 +337,8 @@ Return ONLY Python test code, no additional explanations."""
             # FOCUS: Find the BEST candidate for testing (prioritize functions over classes)
             target_item = None
             target_type = None
+            target_class = None
+            import_statement = None
             
             # Prefer simple functions first (easier to test)
             if module_info['functions']:
@@ -306,12 +347,27 @@ Return ONLY Python test code, no additional explanations."""
                     if not func.startswith('test_') and not func.startswith('_'):
                         target_item = func
                         target_type = "function"
+                        # For standalone functions, import directly
+                        clean_filepath = file_info['filepath'].replace("app/", "").replace("/", ".").replace(".py", "")
+                        import_statement = f"from app.{clean_filepath} import {target_item}"
                         break
             
-            # If no suitable function, try classes
+            # If no suitable function, try class methods
             if not target_item and module_info['classes']:
-                target_item = list(module_info['classes'].keys())[0]
-                target_type = "class"
+                for class_name, class_info in module_info['classes'].items():
+                    if class_info['methods']:
+                        # Get the first public method
+                        for method in class_info['methods']:
+                            if not method.startswith('_') and not method.startswith('test_'):
+                                target_item = method
+                                target_type = "method"
+                                target_class = class_name
+                                # For class methods, import the class
+                                clean_filepath = file_info['filepath'].replace("app/", "").replace("/", ".").replace(".py", "")
+                                import_statement = f"from app.{clean_filepath} import {class_name}"
+                                break
+                        if target_item:
+                            break
             
             if not target_item:
                 logger.warning(f"No suitable testable items found in {file_info['filepath']}")
@@ -327,6 +383,9 @@ Return ONLY Python test code, no additional explanations."""
                 return results
             
             logger.info(f"🎯 TARGET: {target_type} '{target_item}' in {file_info['filepath']}")
+            if target_class:
+                logger.info(f"🎯 CLASS: {target_class}")
+            logger.info(f"🎯 IMPORT: {import_statement}")
             
             # Create enhanced file_info for test generation
             enhanced_file_info = {
@@ -334,6 +393,8 @@ Return ONLY Python test code, no additional explanations."""
                 "module_info": module_info,
                 "target_item": target_item,
                 "target_type": target_type,
+                "target_class": target_class,
+                "import_statement": import_statement,
                 "strategy": "single_function_focus"
             }
             
