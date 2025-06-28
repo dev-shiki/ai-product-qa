@@ -243,9 +243,8 @@ Return ONLY the complete test file code with proper imports.
                 test_file_path = Path("tests") / f"{stem}_v{version}{suffix}"
                 version += 1
                 
-                # Jika sudah cek sampai v10 dan tidak ketemu, berarti file tidak ada
                 if version > 10:
-                return {"success": False, "error": "Test file not found"}
+                    return {"success": False, "error": "Test file not found"}
             
             # Run the specific test file
             cmd = ["python", "-m", "pytest", str(test_file_path), "-v", "--tb=short"]
