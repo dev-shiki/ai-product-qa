@@ -1,3 +1,14 @@
 {
-  "error": "No files with low coverage found"
+  "processed_files": [
+    {
+      "filepath": "app/api/products.py",
+      "coverage": 61.63999999999999,
+      "test_generated": false,
+      "error": "No suitable testable items found",
+      "strategy": "single_function_focus"
+    }
+  ],
+  "success_count": 0,
+  "error_count": 1,
+  "strategy": "single_function_focus"
 }
