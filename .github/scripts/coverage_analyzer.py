@@ -96,33 +96,35 @@ class CoverageAnalyzer:
             
             coverage_data = {}
             
-            # Parse coverage data from XML (focus on app/ files like codecov)
+            # Parse coverage data from XML (fix: don't filter by 'app' prefix initially)
             for package in root.findall(".//package"):
                 package_name = package.get("name", "")
-                if package_name and package_name.startswith("app"):
+                if package_name and package_name != ".":  # Skip root package
                     # Get line rate for the package
                     line_rate = package.get("line-rate", "0")
                     try:
                         lines_covered = float(line_rate) * 100
-                        coverage_data[package_name] = lines_covered
-                        logger.info(f"Package coverage: {package_name} = {lines_covered:.2f}%")
+                        # Add app/ prefix for consistency
+                        normalized_package = f"app/{package_name}" if not package_name.startswith("app") else package_name
+                        coverage_data[normalized_package] = lines_covered
+                        logger.info(f"Package coverage: {normalized_package} = {lines_covered:.2f}%")
                     except (ValueError, TypeError):
                         logger.warning(f"Invalid line-rate for {package_name}: {line_rate}")
-                        coverage_data[package_name] = 0.0
                 
-                # Also check individual classes within packages
+                # Also check individual classes within packages (main source of file-level coverage)
                 for class_elem in package.findall(".//class"):
                     filename = class_elem.get("filename", "")
-                    if filename and filename.startswith("app"):
+                    if filename and filename.endswith('.py'):
                         # Get coverage percentage
                         line_rate = class_elem.get("line-rate", "0")
                         try:
                             lines_covered = float(line_rate) * 100
-                            coverage_data[filename] = lines_covered
-                            logger.info(f"File coverage: {filename} = {lines_covered:.2f}%")
+                            # Add app/ prefix for consistency
+                            normalized_filename = f"app/{filename}" if not filename.startswith("app") else filename
+                            coverage_data[normalized_filename] = lines_covered
+                            logger.info(f"File coverage: {normalized_filename} = {lines_covered:.2f}%")
                         except (ValueError, TypeError):
                             logger.warning(f"Invalid line-rate for {filename}: {line_rate}")
-                            coverage_data[filename] = 0.0
             
             # If no data found, try alternative parsing
             if not coverage_data:
