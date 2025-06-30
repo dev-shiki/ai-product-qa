@@ -81,8 +81,13 @@ class TestGenerator:
                     class_methods[class_name] = []
                 
                 # Detect function definitions
-                elif stripped.startswith('def '):
-                    func_def = stripped.split('def ')[1]
+                elif stripped.startswith('def ') or stripped.startswith('async def '):
+                    # Handle both regular and async functions
+                    if stripped.startswith('async def '):
+                        func_def = stripped.split('async def ')[1]
+                    else:
+                        func_def = stripped.split('def ')[1]
+                    
                     func_name = func_def.split('(')[0].strip()
                     
                     # Extract parameters if possible
@@ -97,6 +102,9 @@ class TestGenerator:
                                     # Remove type hints if present
                                     if ':' in param:
                                         param = param.split(':')[0].strip()
+                                    # Remove default values if present
+                                    if '=' in param:
+                                        param = param.split('=')[0].strip()
                                     params.append(param)
                     
                     if in_class and current_class:
@@ -105,15 +113,17 @@ class TestGenerator:
                         classes[current_class]['methods'].append({
                             'name': func_name,
                             'params': params,
-                            'line': i + 1
+                            'line': i + 1,
+                            'is_async': stripped.startswith('async def ')
                         })
                     else:
-                        # This is a standalone function
+                        # This is a standalone function (including async functions)
                         if not func_name.startswith('_') and not func_name.startswith('test_'):
                             functions.append({
                                 'name': func_name,
                                 'params': params,
-                                'line': i + 1
+                                'line': i + 1,
+                                'is_async': stripped.startswith('async def ')
                             })
                 
                 # Detect end of class (when indentation decreases)
@@ -164,12 +174,30 @@ class TestGenerator:
             else:
                 call_statement = f"{target_class}().{target_item}()"
         else:
-            # For standalone functions
+            # For standalone functions (including async functions)
             if target_params:
-                param_str = ", ".join([f'"{param}_value"' for param in target_params])
+                # Create realistic parameter values based on parameter names
+                param_values = []
+                for param in target_params:
+                    if 'limit' in param.lower():
+                        param_values.append('10')
+                    elif 'id' in param.lower():
+                        param_values.append('"test_id"')
+                    elif 'query' in param.lower() or 'search' in param.lower():
+                        param_values.append('"test_query"')
+                    elif 'category' in param.lower():
+                        param_values.append('"test_category"')
+                    elif 'brand' in param.lower():
+                        param_values.append('"test_brand"')
+                    else:
+                        param_values.append(f'"{param}_value"')
+                param_str = ", ".join(param_values)
                 call_statement = f"{target_item}({param_str})"
             else:
                 call_statement = f"{target_item}()"
+        
+        # Check if target is async
+        is_async = file_info.get("target_is_async", False)
         
         # Create parameter examples for the prompt
         param_examples = ""
@@ -177,11 +205,15 @@ class TestGenerator:
             param_examples = f"\nParameters: {', '.join(target_params)}"
             param_examples += "\nExample values: " + ", ".join([f'"{param}_value"' for param in target_params])
         
+        async_note = ""
+        if is_async:
+            async_note = "\nNOTE: This is an async function - use pytest.mark.asyncio for async tests"
+        
         prompt = f"""Create unit test for single {target_type}: '{target_item}'
 
 File: {filepath}
 Target: {target_type} '{target_item}'{param_examples}
-Import: {import_statement}
+Import: {import_statement}{async_note}
 Call: {call_statement}
 
 Source code:
@@ -197,20 +229,23 @@ Instructions:
 5. Do not use complex mocks
 6. Test must be runnable directly
 7. Use realistic parameter values based on the function signature
+8. For async functions, use @pytest.mark.asyncio decorator
 
 Expected output:
 ```python
 import pytest
 {import_statement}
 
-def test_{target_item}_basic():
+{'@pytest.mark.asyncio' if is_async else ''}
+async def test_{target_item}_basic():
     try:
-        result = {call_statement}
+        result = await {call_statement}
         assert result is not None
     except Exception as e:
         pytest.skip(f"Test skipped due to dependency: {{e}}")
 
-def test_{target_item}_edge_cases():
+{'@pytest.mark.asyncio' if is_async else ''}
+async def test_{target_item}_edge_cases():
     try:
         # Test with edge cases or different parameter values
         pass
@@ -380,6 +415,7 @@ Return ONLY Python test code, no additional explanations."""
             target_type = None
             target_class = None
             target_params = []
+            target_is_async = False
             import_statement = None
             
             # Prefer simple functions first (easier to test)
@@ -390,6 +426,7 @@ Return ONLY Python test code, no additional explanations."""
                         target_item = func['name']
                         target_type = "function"
                         target_params = func['params']
+                        target_is_async = func.get('is_async', False)
                         # For standalone functions, import directly
                         clean_filepath = file_info['filepath'].replace("app/", "").replace("/", ".").replace(".py", "")
                         import_statement = f"from app.{clean_filepath} import {target_item}"
@@ -406,6 +443,7 @@ Return ONLY Python test code, no additional explanations."""
                                 target_type = "method"
                                 target_class = class_name
                                 target_params = method['params']
+                                target_is_async = method.get('is_async', False)
                                 # For class methods, import the class
                                 clean_filepath = file_info['filepath'].replace("app/", "").replace("/", ".").replace(".py", "")
                                 import_statement = f"from app.{clean_filepath} import {class_name}"
@@ -430,6 +468,7 @@ Return ONLY Python test code, no additional explanations."""
             if target_class:
                 logger.info(f"🎯 CLASS: {target_class}")
             logger.info(f"🎯 PARAMS: {target_params}")
+            logger.info(f"🎯 ASYNC: {target_is_async}")
             logger.info(f"🎯 IMPORT: {import_statement}")
             
             # Create enhanced file_info for test generation
@@ -440,6 +479,7 @@ Return ONLY Python test code, no additional explanations."""
                 "target_type": target_type,
                 "target_class": target_class,
                 "target_params": target_params,
+                "target_is_async": target_is_async,
                 "import_statement": import_statement,
                 "strategy": "single_function_focus"
             }
