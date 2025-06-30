@@ -73,14 +73,6 @@ jobs:
         fi
       continue-on-error: true
 
-    - name: Run Auto-Contribution Bot
-      run: |
-        echo "[INFO] Starting Auto-Contribution Bot..."
-        REPO_OWNER="${{ github.repository_owner }}"
-        OWNER_EMAIL="$REPO_OWNER@users.noreply.github.com"
-        python .github/scripts/contribution_bot.py "$OWNER_EMAIL" "$REPO_OWNER" || echo "[SKIP] Contribution bot failed"
-      continue-on-error: true
-
     - name: Commit and Push Changes
       run: |
         echo "[INFO] Checking for changes to commit..."

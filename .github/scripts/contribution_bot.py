@@ -163,12 +163,12 @@ Auto-generated test coverage improvement system.
             if not self.update_activity_log():
                 return False
             
-            # Update README stats
-            if not self.update_readme_stats():
-                return False
+            # Skip README update (disabled to keep it private)
+            # if not self.update_readme_stats():
+            #     return False
             
-            # Stage files
-            subprocess.run(["git", "add", str(self.activity_file), str(self.readme_file)], check=True)
+            # Stage files (only bot_activity.json, not README)
+            subprocess.run(["git", "add", str(self.activity_file)], check=True)
             
             # Create commit message
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
