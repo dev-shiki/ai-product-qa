@@ -14,7 +14,6 @@ from pathlib import Path
 class ContributionBot:
     def __init__(self):
         self.activity_file = Path("bot_activity.json")
-        self.readme_file = Path("README.md")
         
     def setup_git_with_user_email(self, user_email: str, user_name: str = None):
         """Setup git dengan email user yang sebenarnya"""
@@ -73,89 +72,6 @@ class ContributionBot:
             print(f"Error updating activity log: {e}")
             return False
     
-    def update_readme_stats(self):
-        """Update README dengan bot stats"""
-        try:
-            if not self.activity_file.exists():
-                return False
-            
-            with open(self.activity_file, 'r', encoding='utf-8') as f:
-                activity = json.load(f)
-            
-            # Create/update stats section in README
-            stats_section = f"""
-## Bot Activity Stats
-
-- **Total Auto-Commits**: {activity["total_commits"]}
-- **Last Activity**: {activity["last_run"][:19].replace('T', ' ')}
-- **Bot Started**: {activity["first_run"][:19].replace('T', ' ')}
-
-*This repository uses automated test generation to continuously improve code coverage.*
-"""
-            
-            # Read existing README or create new
-            if self.readme_file.exists():
-                try:
-                    with open(self.readme_file, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                except UnicodeDecodeError:
-                    # Try different encodings
-                    encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
-                    content = ""
-                    for encoding in encodings:
-                        try:
-                            with open(self.readme_file, 'r', encoding=encoding) as f:
-                                content = f.read()
-                            break
-                        except UnicodeDecodeError:
-                            continue
-                
-                # Replace existing stats section or append
-                if "## Bot Activity Stats" in content:
-                    # Find and replace existing section
-                    lines = content.split('\n')
-                    start_idx = None
-                    end_idx = None
-                    
-                    for i, line in enumerate(lines):
-                        if "## Bot Activity Stats" in line:
-                            start_idx = i
-                        elif start_idx is not None and line.startswith("## ") and i > start_idx:
-                            end_idx = i
-                            break
-                    
-                    if start_idx is not None:
-                        if end_idx is not None:
-                            # Replace section
-                            new_lines = lines[:start_idx] + stats_section.strip().split('\n') + lines[end_idx:]
-                        else:
-                            # Replace to end
-                            new_lines = lines[:start_idx] + stats_section.strip().split('\n')
-                        
-                        content = '\n'.join(new_lines)
-                    else:
-                        # Append at end
-                        content += "\n" + stats_section
-                else:
-                    # Append stats section
-                    content += "\n" + stats_section
-            else:
-                # Create new README
-                content = f"""# AI Product QA
-
-Auto-generated test coverage improvement system.
-{stats_section}
-"""
-            
-            # Write updated README with UTF-8 encoding
-            with open(self.readme_file, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            return True
-        except Exception as e:
-            print(f"Error updating README: {e}")
-            return False
-    
     def create_meaningful_commit(self):
         """Create a meaningful commit dengan actual changes"""
         try:
@@ -163,11 +79,7 @@ Auto-generated test coverage improvement system.
             if not self.update_activity_log():
                 return False
             
-            # Skip README update (disabled to keep it private)
-            # if not self.update_readme_stats():
-            #     return False
-            
-            # Stage files (only bot_activity.json, not README)
+            # Stage files (only bot_activity.json)
             subprocess.run(["git", "add", str(self.activity_file)], check=True)
             
             # Create commit message
