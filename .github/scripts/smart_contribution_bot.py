@@ -283,11 +283,17 @@ Give 2 quick improvement suggestions in 100 words or less."""
             return False
     
     def commit_improvements(self, files_to_commit, contribution_type):
-        """Commit the generated improvements"""
+        """Commit the generated improvements - workflow will handle push"""
         try:
             # Stage files
             for file_path in files_to_commit:
                 subprocess.run(["git", "add", str(file_path)], check=True)
+            
+            # Check if there are any changes to commit
+            result = subprocess.run(["git", "diff", "--staged", "--quiet"], capture_output=True)
+            if result.returncode == 0:
+                print("No changes to commit")
+                return True
             
             # Shorter commit messages for high-frequency runs
             hour = datetime.now().hour
@@ -298,9 +304,8 @@ Give 2 quick improvement suggestions in 100 words or less."""
             subprocess.run(["git", "commit", "-m", commit_msg], check=True)
             print(f"Committed: {commit_msg}")
             
-            # Push to remote
-            subprocess.run(["git", "push"], check=True)
-            print("Pushed to remote successfully!")
+            # Don't push here - let the workflow handle it with retry logic
+            print("Commit successful, workflow will handle push")
             
             return True
             

@@ -82,6 +82,12 @@ on:
         default: false
         type: boolean
 
+# Add proper permissions for GitHub Actions
+permissions:
+  contents: write
+  actions: read
+  metadata: read
+
 jobs:
   smart-contribution:
     runs-on: ubuntu-latest
@@ -98,6 +104,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
+        # Use personal access token or GITHUB_TOKEN with write permissions
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
     
@@ -113,8 +120,18 @@ jobs:
     
     - name: Configure Git
       run: |
-        git config --global user.name "Smart AI Bot"
-        git config --global user.email "action@github.com"
+        # Configure git with GitHub Actions bot credentials
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        echo "Git configured for GitHub Actions bot"
+    
+    - name: Check repository permissions
+      run: |
+        echo "Repository: ${{ github.repository }}"
+        echo "Actor: ${{ github.actor }}"
+        echo "Token permissions check..."
+        git remote -v
+        git status
     
     - name: Check for recent commits (smart throttling)
       id: check_commits
@@ -173,6 +190,44 @@ jobs:
         
         # Run the smart contribution bot
         python .github/scripts/smart_contribution_bot.py
+    
+    - name: Push changes with retry
+      if: steps.check_commits.outputs.skip == 'false'
+      run: |
+        # Check if there are any changes to push
+        if git diff --staged --quiet && git diff --quiet; then
+          echo "No changes to push"
+          exit 0
+        fi
+        
+        # Try to push with retry logic
+        MAX_RETRIES=3
+        RETRY_COUNT=0
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          echo "Push attempt $((RETRY_COUNT + 1))/$MAX_RETRIES"
+          
+          if git push origin ${{ github.ref_name }}; then
+            echo "✅ Successfully pushed to remote"
+            exit 0
+          else
+            echo "❌ Push failed, attempt $((RETRY_COUNT + 1))/$MAX_RETRIES"
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Waiting 10 seconds before retry..."
+              sleep 10
+              
+              # Try to pull and rebase in case of conflicts
+              git fetch origin ${{ github.ref_name }}
+              git rebase origin/${{ github.ref_name }} || true
+            fi
+          fi
+        done
+        
+        echo "❌ Failed to push after $MAX_RETRIES attempts"
+        echo "This might be a permissions issue or network problem"
+        exit 1
     
     - name: Verify changes
       if: steps.check_commits.outputs.skip == 'false'
