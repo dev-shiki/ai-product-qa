@@ -2,8 +2,8 @@ name: Smart AI Contribution Bot
 
 on:
   schedule:
-    # Target: ~50 runs per day with random distribution
-    # Every 30 minutes with random minute offsets for natural pattern
+    # Target: ~60 scheduled runs per day for 50+ successful contributions
+    # Every 25-30 minutes with random minute offsets for natural pattern
     - cron: '7 0 * * *'    # 12:07 AM
     - cron: '23 0 * * *'   # 12:23 AM
     - cron: '41 1 * * *'   # 1:41 AM
@@ -43,7 +43,27 @@ on:
     - cron: '26 22 * * *'  # 10:26 PM
     - cron: '44 23 * * *'  # 11:44 PM
     
-    # Additional random runs for variety (weekend boost)
+    # Additional high-frequency runs for target achievement
+    - cron: '58 0 * * *'   # 12:58 AM
+    - cron: '16 1 * * *'   # 1:16 AM
+    - cron: '34 1 * * *'   # 1:34 AM
+    - cron: '54 2 * * *'   # 2:54 AM
+    - cron: '22 3 * * *'   # 3:22 AM
+    - cron: '42 3 * * *'   # 3:42 AM
+    - cron: '3 4 * * *'    # 4:03 AM
+    - cron: '24 4 * * *'   # 4:24 AM
+    - cron: '45 4 * * *'   # 4:45 AM
+    - cron: '7 5 * * *'    # 5:07 AM
+    - cron: '26 5 * * *'   # 5:26 AM
+    - cron: '47 5 * * *'   # 5:47 AM
+    - cron: '9 6 * * *'    # 6:09 AM
+    - cron: '31 6 * * *'   # 6:31 AM
+    - cron: '50 6 * * *'   # 6:50 AM
+    - cron: '13 7 * * *'   # 7:13 AM
+    - cron: '34 7 * * *'   # 7:34 AM
+    - cron: '55 7 * * *'   # 7:55 AM
+    
+    # Weekend boost for consistency
     - cron: '2 3 * * 0'    # Sunday 3:02 AM
     - cron: '16 8 * * 0'   # Sunday 8:16 AM
     - cron: '34 13 * * 0'  # Sunday 1:34 PM
@@ -136,21 +156,21 @@ jobs:
     - name: Check for recent commits (smart throttling)
       id: check_commits
       run: |
-        # More lenient throttling for higher frequency
-        RECENT_COMMITS=$(git log --since="30 minutes ago" --oneline | wc -l)
+        # More aggressive throttling - check last 15 minutes only
+        RECENT_COMMITS=$(git log --since="15 minutes ago" --oneline | wc -l)
         FORCE_RUN="${{ github.event.inputs.force_run }}"
         
         if [ "$FORCE_RUN" = "true" ]; then
           echo "Force run enabled, proceeding"
           echo "skip=false" >> $GITHUB_OUTPUT
         elif [ $RECENT_COMMITS -gt 1 ]; then
-          echo "Recent commits in last 30 minutes ($RECENT_COMMITS), skipping to avoid spam"
+          echo "Recent commits in last 15 minutes ($RECENT_COMMITS), skipping to avoid spam"
           echo "skip=true" >> $GITHUB_OUTPUT
         else
-          # Additional randomization - 15% chance to skip for natural variation
+          # Reduced random skip chance for higher frequency (10% instead of 15%)
           RANDOM_SKIP=$((RANDOM % 100))
-          if [ $RANDOM_SKIP -lt 15 ]; then
-            echo "Random skip for natural variation"
+          if [ $RANDOM_SKIP -lt 10 ]; then
+            echo "Random skip for natural variation (10% chance)"
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "Proceeding with contribution"
@@ -164,8 +184,8 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         CONTRIBUTION_TYPE: ${{ github.event.inputs.contribution_type || 'random' }}
       run: |
-        # Extended randomization for high frequency runs
-        DELAY=$((RANDOM % 180 + 30))  # 30 seconds to 3 minutes delay
+        # Shorter randomization for higher frequency (optimized for 50/day)
+        DELAY=$((RANDOM % 120 + 15))  # 15 seconds to 2 minutes delay
         echo "⏳ Waiting $DELAY seconds for natural timing..."
         sleep $DELAY
         
