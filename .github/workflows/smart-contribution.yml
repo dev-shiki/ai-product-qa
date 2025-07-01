@@ -218,11 +218,40 @@ jobs:
         if [[ -n "$(git status --porcelain)" ]]; then
           echo "Changes detected, committing..."
           git add -A
-          TIMESTAMP=$(date '+%Y-%m-%d %H:%M UTC')
-          COMMIT_MSG="🤖 AI Enhancement: Smart Contribution - $TIMESTAMP"
-          git commit -m "$COMMIT_MSG" || echo "No changes to commit"
-          git push origin ${{ github.ref_name }}
-          echo "✅ Successfully committed and pushed changes"
+          
+          # Use time-based emoji like the bot
+          HOUR=$(date +%H)
+          if [ $HOUR -ge 0 ] && [ $HOUR -lt 6 ]; then
+            TIME_EMOJI="🌙"
+          elif [ $HOUR -ge 6 ] && [ $HOUR -lt 12 ]; then
+            TIME_EMOJI="🌅"
+          elif [ $HOUR -ge 12 ] && [ $HOUR -lt 18 ]; then
+            TIME_EMOJI="☀️"
+          else
+            TIME_EMOJI="🌆"
+          fi
+          
+          COMMIT_MSG="$TIME_EMOJI AI Enhancement - $(date '+%H:%M')"
+          git commit -m "$COMMIT_MSG"
+          
+          # Push with retry
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git push origin ${{ github.ref_name }}; then
+              echo "✅ Successfully pushed changes to remote"
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "Push failed, retrying in 5 seconds... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+                sleep 5
+              else
+                echo "❌ Push failed after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
         else
           echo "ℹ️ No changes to commit or push"
         fi
@@ -265,4 +294,15 @@ jobs:
           else
             echo "🚀 Starting daily contribution cycle"
           fi
-        fi 
+        fi
+    
+    - name: Upload Artifacts for Debug
+      if: steps.check_commits.outputs.skip == 'false'
+      uses: actions/upload-artifact@v4
+      with:
+        name: smart-contribution-artifacts-${{ github.run_number }}
+        path: |
+          ai_improvements/
+          smart_bot_activity.json
+        retention-days: 7
+        if-no-files-found: warn 

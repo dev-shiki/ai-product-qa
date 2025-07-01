@@ -283,29 +283,20 @@ Give 2 quick improvement suggestions in 100 words or less."""
             return False
     
     def commit_improvements(self, files_to_commit, contribution_type):
-        """Commit the generated improvements - workflow will handle push"""
+        """Stage files for commit - workflow will handle commit and push"""
         try:
             # Stage files
             for file_path in files_to_commit:
                 subprocess.run(["git", "add", str(file_path)], check=True)
             
-            # Check if there are any changes to commit
+            # Check if there are any changes staged
             result = subprocess.run(["git", "diff", "--staged", "--quiet"], capture_output=True)
             if result.returncode == 0:
-                print("No changes to commit")
-                return True
+                print("No changes to stage")
+                return False
             
-            # Shorter commit messages for high-frequency runs
-            hour = datetime.now().hour
-            time_emoji = "🌙" if 0 <= hour < 6 else "🌅" if 6 <= hour < 12 else "☀️" if 12 <= hour < 18 else "🌆"
-            
-            commit_msg = f"{time_emoji} AI: {contribution_type.replace('_', ' ').title()} - {datetime.now().strftime('%H:%M')}"
-            
-            subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-            print(f"Committed: {commit_msg}")
-            
-            # Don't push here - let the workflow handle it with retry logic
-            print("Commit successful, workflow will handle push")
+            print(f"✅ Files staged for commit")
+            print("Workflow will handle commit and push")
             
             return True
             
@@ -313,7 +304,7 @@ Give 2 quick improvement suggestions in 100 words or less."""
             print(f"Git command failed: {e}")
             return False
         except Exception as e:
-            print(f"Error committing improvements: {e}")
+            print(f"Error staging files: {e}")
             return False
     
     def run_smart_contribution(self):
