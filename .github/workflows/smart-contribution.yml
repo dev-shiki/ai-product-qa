@@ -108,7 +108,6 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd ai-product-qa
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
@@ -148,8 +147,6 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         CONTRIBUTION_TYPE: ${{ github.event.inputs.contribution_type || 'random' }}
       run: |
-        cd ai-product-qa
-        
         # Extended randomization for high frequency runs
         DELAY=$((RANDOM % 180 + 30))  # 30 seconds to 3 minutes delay
         echo "⏳ Waiting $DELAY seconds for natural timing..."
@@ -180,24 +177,23 @@ jobs:
     - name: Verify changes
       if: steps.check_commits.outputs.skip == 'false'
       run: |
-        if [ -d "ai-product-qa/ai_improvements" ]; then
+        if [ -d "ai_improvements" ]; then
           echo "✅ AI improvements directory created"
-          IMPROVEMENT_COUNT=$(find ai-product-qa/ai_improvements -name "*.md" | wc -l)
+          IMPROVEMENT_COUNT=$(find ai_improvements -name "*.md" | wc -l)
           echo "📄 Total improvement files: $IMPROVEMENT_COUNT"
           echo "📄 Latest files:"
-          ls -lt ai-product-qa/ai_improvements/*.md | head -3
+          ls -lt ai_improvements/*.md | head -3
         fi
         
-        if [ -f "ai-product-qa/smart_bot_activity.json" ]; then
+        if [ -f "smart_bot_activity.json" ]; then
           echo "✅ Smart bot activity log updated"
           echo "📊 Current stats:"
-          cat ai-product-qa/smart_bot_activity.json | jq '.total_contributions, .contribution_types'
+          cat smart_bot_activity.json | jq '.total_contributions, .contribution_types'
         fi
     
     - name: Log daily progress
       if: steps.check_commits.outputs.skip == 'false'
       run: |
-        cd ai-product-qa
         if [ -f "smart_bot_activity.json" ]; then
           TOTAL=$(cat smart_bot_activity.json | jq '.total_contributions')
           TODAY_COUNT=$(git log --since="24 hours ago" --oneline --grep="AI Enhancement" | wc -l)
