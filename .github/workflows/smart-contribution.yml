@@ -211,16 +211,20 @@ jobs:
         # Run the smart contribution bot
         python .github/scripts/smart_contribution_bot.py
     
-    - name: Push changes with retry
+    - name: Commit and Push Changes
       if: steps.check_commits.outputs.skip == 'false'
       run: |
         echo "[INFO] Checking for changes to commit and push..."
         if [[ -n "$(git status --porcelain)" ]]; then
-          echo "Changes detected, pushing..."
+          echo "Changes detected, committing..."
+          git add -A
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M UTC')
+          COMMIT_MSG="🤖 AI Enhancement: Smart Contribution - $TIMESTAMP"
+          git commit -m "$COMMIT_MSG" || echo "No changes to commit"
           git push origin ${{ github.ref_name }}
-          echo "✅ Successfully pushed changes to remote"
+          echo "✅ Successfully committed and pushed changes"
         else
-          echo "ℹ️ No changes to push"
+          echo "ℹ️ No changes to commit or push"
         fi
     
     - name: Verify changes
