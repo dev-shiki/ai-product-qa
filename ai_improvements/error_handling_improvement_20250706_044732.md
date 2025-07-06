@@ -1,0 +1,88 @@
+# Error Handling Improvement
+
+**File**: `./tests/test_product_data_service.py`  
+**Time**: 04:47:32  
+**Type**: error_handling_improvement
+
+## Improvement
+
+```python
+import pytest
+from unittest.mock import patch, MagicMock
+from app.services.product_data_service import ProductDataService
+from app.services.local_product_service import LocalProductService
+import logging
+
+# Configure logging (optional, but highly recommended for production)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+@pytest.fixture
+def mock_local_service():
+    return MagicMock()
+
+@pytest.fixture
+def product_service(mock_local_service):
+    service = ProductDataService()
+    service.local_service = mock_local_service
+    return service
+
+class TestProductDataService:
+    
+    def test_init(self, product_service):
+        """Test ProductDataService initialization"""
+        assert product_service.local_service is not None
+        assert isinstance(product_service.local_service, MagicMock)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_success(self, product_service, mock_local_service):
+        """Test successful product search"""
+        mock_products = [
+            {"id": "P001", "name": "iPhone 15 Pro Max", "price": 21999000}
+        ]
+        mock_local_service.search_products.return_value = mock_products
+        
+        result = await product_service.search_products("iPhone", 5)
+        
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.search_products.assert_called_once_with("iPhone", 5)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_error(self, product_service, mock_local_service):
+        """Test product search with error"""
+        mock_local_service.search_products.side_effect = Exception("Test error")
+        
+        with pytest.raises(Exception, match="Test error"): # Improved error handling
+            await product_service.search_products("test", 5)
+
+
+    
+    @pytest.mark.asyncio
+    async def test_get_products_with_search(self, product_service, mock_local_service):
+        """Test get_products with search parameter"""
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max"}]
+
+```
+
+Key improvements in the `test_search_products_error` function:
+
+* **Explicitly Assert Exception is Raised:** Instead of catching the exception and returning an empty list (which hides the error and makes debugging harder), the improved code now uses `pytest.raises` to *assert* that the expected exception is actually raised.  This is a much better practice for testing error conditions.
+
+* **Match Error Message (Optional but Recommended):** The `pytest.raises` function includes a `match="Test error"` argument. This ensures that the correct type of exception *and* the correct error message are raised. This makes the test much more robust and less likely to pass falsely. If the error message changes, the test will fail, prompting you to update the test.
+
+* **No more returning an empty list:** Returning `[]` is an anti-pattern when an exception is expected.  The test should verify that the expected exception is raised.  The business logic of the `ProductDataService` class should handle how to recover from a failure in the local service, *not* the unit test.
+
+Why these changes are important:
+
+* **Proper Error Reporting:** The original code hid the error.  If `search_products` failed in a real application, the caller would receive an empty list and might assume no products were found, leading to unexpected behavior.  By raising the exception, the error is propagated up the call stack where it can be handled (e.g., logged, retried, or displayed to the user).
+* **More Robust Tests:** The improved test specifically verifies that an exception is raised with the expected message. This confirms that the `search_products` method is correctly handling errors.
+* **Clearer Intent:** The `pytest.raises` context manager makes it immediately clear that the test is designed to verify an exception is raised.
+* **Maintainability:**  If the code under test changes its error handling behavior (e.g., raises a different exception type or a different message), the test will fail, prompting you to update the test and the code.
+* **Avoid Masking Problems:** Returning an empty list masks the problem. This can lead to issues that are very difficult to debug. Proper error handling makes the system more resilient.
+
+The original code effectively treated all errors as "no products found", which is almost certainly not what's desired in a real application.  The improved test encourages proper error handling by surfacing exceptions, enabling better logging, retry mechanisms, or user-facing error messages.  The logging configuration, while optional, is highly recommended for actual production systems.
+
+---
+*Generated by Smart AI Bot*
