@@ -2,24 +2,16 @@ name: Smart AI Contribution Bot
 
 on:
   schedule:
-    # Reduced to 17 scheduled runs per day
+    # Reduced to 9 random scheduled runs per day (always <10)
     - cron: '7 0 * * *'    # 12:07 AM
-    - cron: '23 0 * * *'   # 12:23 AM
-    - cron: '41 1 * * *'   # 1:41 AM
-    - cron: '15 2 * * *'   # 2:15 AM
-    - cron: '33 2 * * *'   # 2:33 AM
-    - cron: '52 3 * * *'   # 3:52 AM
-    - cron: '18 4 * * *'   # 4:18 AM
-    - cron: '37 4 * * *'   # 4:37 AM
-    - cron: '9 5 * * *'    # 5:09 AM
-    - cron: '28 5 * * *'   # 5:28 AM
-    - cron: '46 6 * * *'   # 6:46 AM
-    - cron: '11 7 * * *'   # 7:11 AM
-    - cron: '29 7 * * *'   # 7:29 AM
-    - cron: '48 8 * * *'   # 8:48 AM
-    - cron: '14 9 * * *'   # 9:14 AM
-    - cron: '35 9 * * *'   # 9:35 AM
-    - cron: '53 10 * * *'  # 10:53 AM
+    - cron: '23 3 * * *'   # 3:23 AM
+    - cron: '41 6 * * *'   # 6:41 AM
+    - cron: '15 9 * * *'   # 9:15 AM
+    - cron: '33 12 * * *'  # 12:33 PM
+    - cron: '52 15 * * *'  # 3:52 PM
+    - cron: '18 18 * * *'  # 6:18 PM
+    - cron: '37 20 * * *'  # 8:37 PM
+    - cron: '9 22 * * *'   # 10:09 PM
     
     # Additional high-frequency runs for target achievement
     - cron: '58 0 * * *'   # 12:58 AM
