@@ -307,9 +307,26 @@ Give 2 quick improvement suggestions in 100 words or less."""
             print(f"Error staging files: {e}")
             return False
     
+    def has_reached_daily_limit(self, limit=5):
+        """Check if daily improvement limit has been reached"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self.activity_file.exists():
+            with open(self.activity_file, 'r', encoding='utf-8') as f:
+                activity = json.load(f)
+            today_count = sum(1 for a in activity.get('activities', []) if a['timestamp'].startswith(today))
+            if today_count >= limit:
+                print(f"🚫 Daily limit of {limit} improvements reached ({today_count})")
+                return True
+        return False
+    
     def run_smart_contribution(self):
         """Run one cycle of smart contribution - optimized for high frequency"""
         print(f"🤖 Smart Bot - {datetime.now().strftime('%H:%M:%S')}")
+        
+        # Cek limit harian
+        if self.has_reached_daily_limit():
+            print("Skipping: daily limit reached.")
+            return False
         
         # Setup AI
         if not self.setup_gemini_api():
