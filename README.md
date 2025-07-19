@@ -1,22 +1,22 @@
-# 🛍️ Product Assistant
+# Product Assistant
 
 [![codecov](https://codecov.io/gh/dev-shiki/ai-product-qa/graph/badge.svg?token=ZES8SJ8JVN)](https://codecov.io/gh/dev-shiki/ai-product-qa)
 
 A smart product recommendation system that helps users find the right products for their needs. The application provides intelligent search and recommendations using local product data with AI-powered insights.
 
-## ✨ Features
+## Features
 
-- 🔍 **Smart Product Search** - Find products based on natural language queries
-- 🤖 **AI-Powered Recommendations** - Get personalized product suggestions using Google AI
-- 📊 **Intelligent Filtering** - Filter by category, brand, rating, and price
-- 💰 **Price Comparison** - Compare prices across different products
-- ⭐ **Rating & Reviews** - View product ratings and user feedback
-- 🚚 **Availability Information** - Get stock and availability details
-- 📱 **Modern Web Interface** - Clean and responsive Streamlit frontend
-- 🧪 **Comprehensive Testing** - 80%+ test coverage with automated CI/CD
-- 📦 **Local Data Source** - Reliable local product database with 50+ products
+- **Smart Product Search** - Find products based on natural language queries
+- **AI-Powered Recommendations** - Get personalized product suggestions using Google AI
+- **Intelligent Filtering** - Filter by category, brand, rating, and price
+- **Price Comparison** - Compare prices across different products
+- **Rating & Reviews** - View product ratings and user feedback
+- **Availability Information** - Get stock and availability details
+- **Modern Web Interface** - Clean and responsive Streamlit frontend
+- **Comprehensive Testing** - 80%+ test coverage with automated CI/CD
+- **Local Data Source** - Reliable local product database with 50+ products
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ai-product-qa/
@@ -37,7 +37,7 @@ ai-product-qa/
 └── requirements.txt       # Dependencies
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -77,7 +77,7 @@ ai-product-qa/
    - Backend API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
 
-## 🎯 Usage
+## Usage
 
 ### For Users
 
@@ -135,7 +135,7 @@ response = requests.get("http://localhost:8000/api/queries/products/top-rated?li
 top_products = response.json()
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -151,7 +151,7 @@ The application uses a comprehensive local product database:
 - **Brands**: Apple, Samsung, Sony, ASUS, Dell, Canon, DJI, Nintendo, and others
 - **Google AI** - Intelligent recommendations and natural language processing
 
-## 🛠️ Development
+## Development
 
 ### Project Structure
 
@@ -280,7 +280,7 @@ docker run -d \
 - ✅ **Optimized builds** - Fast and efficient
 - ✅ **Production-ready** - Ready for deployment
 
-## 📊 Performance & Reliability
+## Performance & Reliability
 
 - **Response Time**: < 2 seconds for most queries
 - **Uptime**: 99.9% with automatic fallback mechanisms
@@ -289,7 +289,7 @@ docker run -d \
 - **Test Coverage**: 80%+ with automated CI/CD
 - **Error Recovery**: Automatic fallback to local data
 
-## 🔒 Security
+## Security
 
 - CORS enabled for frontend-backend communication
 - Input validation on all endpoints using Pydantic models
@@ -297,7 +297,7 @@ docker run -d \
 - Secure environment variable handling
 - No sensitive data in code or logs
 
-## 🚀 CI/CD Pipeline
+## CI/CD Pipeline
 
 The project includes automated CI/CD with:
 
@@ -307,7 +307,7 @@ The project includes automated CI/CD with:
 - **Docker Builds** - Automated container builds
 - **Deployment Ready** - Easy deployment to cloud platforms
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -324,11 +324,11 @@ The project includes automated CI/CD with:
 - Update documentation for API changes
 - Use meaningful commit messages
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
+## Support
 
 If you encounter any issues:
 
@@ -338,7 +338,7 @@ If you encounter any issues:
 4. Check the API documentation at http://localhost:8000/docs
 5. Review the test suite for usage examples
 
-## 🎉 Recent Updates
+## Recent Updates
 
 - ✅ **Improved Test Coverage** - Now at 80%+ with comprehensive testing
 - ✅ **Enhanced API Endpoints** - More flexible product search and filtering
