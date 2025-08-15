@@ -1,0 +1,320 @@
+# Logging Enhancement
+
+**File**: `./tests/test_product_data_service.py`  
+**Time**: 04:17:29  
+**Type**: logging_enhancement
+
+## Improvement
+
+```python
+import pytest
+from unittest.mock import patch, MagicMock
+from app.services.product_data_service import ProductDataService
+from app.services.local_product_service import LocalProductService
+import logging
+
+logger = logging.getLogger(__name__)
+
+@pytest.fixture
+def mock_local_service():
+    return MagicMock()
+
+@pytest.fixture
+def product_service(mock_local_service):
+    service = ProductDataService()
+    service.local_service = mock_local_service
+    return service
+
+class TestProductDataService:
+    
+    def test_init(self, product_service):
+        """Test ProductDataService initialization"""
+        assert product_service.local_service is not None
+        assert isinstance(product_service.local_service, MagicMock)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_success(self, product_service, mock_local_service):
+        """Test successful product search"""
+        mock_products = [
+            {"id": "P001", "name": "iPhone 15 Pro Max", "price": 21999000}
+        ]
+        mock_local_service.search_products.return_value = mock_products
+        
+        result = await product_service.search_products("iPhone", 5)
+        
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.search_products.assert_called_once_with("iPhone", 5)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_error(self, product_service, mock_local_service):
+        """Test product search with error"""
+        mock_local_service.search_products.side_effect = Exception("Test error")
+        
+        result = await product_service.search_products("test", 5)
+        
+        assert result == []
+    
+    @pytest.mark.asyncio
+    async def test_get_products_with_search(self, product_service, mock_local_service):
+        """Test get_products with search parameter"""
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max"}]
+
+        mock_local_service.get_products.return_value = mock_products
+
+        result = await product_service.get_products(search="iPhone")
+
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.get_products.assert_called_once_with(search="iPhone", limit=10)
+
+    @pytest.mark.asyncio
+    async def test_get_products_no_search(self, product_service, mock_local_service):
+        """Test get_products without search parameter"""
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max"}]
+
+        mock_local_service.get_products.return_value = mock_products
+
+        result = await product_service.get_products()
+
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.get_products.assert_called_once_with(search=None, limit=10)
+
+    @pytest.mark.asyncio
+    async def test_get_product_by_id_success(self, product_service, mock_local_service):
+        """Test successful retrieval of product by ID"""
+        mock_product = {"id": "P001", "name": "iPhone 15 Pro Max"}
+        mock_local_service.get_product_by_id.return_value = mock_product
+
+        result = await product_service.get_product_by_id("P001")
+
+        assert isinstance(result, dict)
+        assert result["id"] == "P001"
+        mock_local_service.get_product_by_id.assert_called_once_with("P001")
+
+    @pytest.mark.asyncio
+    async def test_get_product_by_id_not_found(self, product_service, mock_local_service):
+        """Test retrieval of product by ID when not found"""
+        mock_local_service.get_product_by_id.return_value = None
+
+        result = await product_service.get_product_by_id("P002")
+
+        assert result is None
+        mock_local_service.get_product_by_id.assert_called_once_with("P002")
+    
+    @pytest.mark.asyncio
+    async def test_get_product_by_id_error(self, product_service, mock_local_service):
+        """Test retrieval of product by ID with error"""
+        mock_local_service.get_product_by_id.side_effect = Exception("Test error")
+        
+        result = await product_service.get_product_by_id("P002")
+        
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_search_products_empty_result(self, product_service, mock_local_service):
+        """Test product search with empty result from local service"""
+        mock_local_service.search_products.return_value = []
+
+        result = await product_service.search_products("NonExistentProduct", 5)
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+        mock_local_service.search_products.assert_called_once_with("NonExistentProduct", 5)
+
+    @pytest.mark.asyncio
+    async def test_get_products_empty_result(self, product_service, mock_local_service):
+        """Test get_products with empty result from local service"""
+        mock_local_service.get_products.return_value = []
+
+        result = await product_service.get_products(search="NonExistentProduct")
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+        mock_local_service.get_products.assert_called_once_with(search="NonExistentProduct", limit=10)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_with_limit(self, product_service, mock_local_service):
+        """Test successful product search with specified limit"""
+        mock_products = [
+            {"id": "P001", "name": "iPhone 15 Pro Max", "price": 21999000},
+            {"id": "P002", "name": "Samsung Galaxy S23", "price": 17999000}
+        ]
+        mock_local_service.search_products.return_value = mock_products[:1]  # Return only 1 product
+
+        result = await product_service.search_products("iPhone", 1)
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["id"] == "P001"  # Check if the correct product is returned
+        mock_local_service.search_products.assert_called_once_with("iPhone", 1)
+```
+
+```python
+import pytest
+from unittest.mock import patch, MagicMock
+from app.services.product_data_service import ProductDataService
+from app.services.local_product_service import LocalProductService
+import logging
+
+logger = logging.getLogger(__name__)
+
+@pytest.fixture
+def mock_local_service():
+    return MagicMock()
+
+@pytest.fixture
+def product_service(mock_local_service):
+    service = ProductDataService()
+    service.local_service = mock_local_service
+    return service
+
+class TestProductDataService:
+    
+    def test_init(self, product_service):
+        """Test ProductDataService initialization"""
+        assert product_service.local_service is not None
+        assert isinstance(product_service.local_service, MagicMock)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_success(self, product_service, mock_local_service):
+        """Test successful product search"""
+        mock_products = [
+            {"id": "P001", "name": "iPhone 15 Pro Max", "price": 21999000}
+        ]
+        mock_local_service.search_products.return_value = mock_products
+        
+        result = await product_service.search_products("iPhone", 5)
+        
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.search_products.assert_called_once_with("iPhone", 5)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_error(self, product_service, mock_local_service):
+        """Test product search with error"""
+        mock_local_service.search_products.side_effect = Exception("Test error")
+        
+        result = await product_service.search_products("test", 5)
+        
+        assert result == []
+    
+    @pytest.mark.asyncio
+    async def test_get_products_with_search(self, product_service, mock_local_service):
+        """Test get_products with search parameter"""
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max"}]
+
+        mock_local_service.get_products.return_value = mock_products
+
+        result = await product_service.get_products(search="iPhone")
+
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.get_products.assert_called_once_with(search="iPhone", limit=10)
+
+    @pytest.mark.asyncio
+    async def test_get_products_no_search(self, product_service, mock_local_service):
+        """Test get_products without search parameter"""
+        mock_products = [{"id": "P001", "name": "iPhone 15 Pro Max"}]
+
+        mock_local_service.get_products.return_value = mock_products
+
+        result = await product_service.get_products()
+
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert all("id" in p and "name" in p for p in result)
+        mock_local_service.get_products.assert_called_once_with(search=None, limit=10)
+
+    @pytest.mark.asyncio
+    async def test_get_product_by_id_success(self, product_service, mock_local_service):
+        """Test successful retrieval of product by ID"""
+        mock_product = {"id": "P001", "name": "iPhone 15 Pro Max"}
+        mock_local_service.get_product_by_id.return_value = mock_product
+
+        result = await product_service.get_product_by_id("P001")
+
+        assert isinstance(result, dict)
+        assert result["id"] == "P001"
+        mock_local_service.get_product_by_id.assert_called_once_with("P001")
+
+    @pytest.mark.asyncio
+    async def test_get_product_by_id_not_found(self, product_service, mock_local_service):
+        """Test retrieval of product by ID when not found"""
+        mock_local_service.get_product_by_id.return_value = None
+
+        result = await product_service.get_product_by_id("P002")
+
+        assert result is None
+        mock_local_service.get_product_by_id.assert_called_once_with("P002")
+    
+    @pytest.mark.asyncio
+    async def test_get_product_by_id_error(self, product_service, mock_local_service):
+        """Test retrieval of product by ID with error"""
+        mock_local_service.get_product_by_id.side_effect = Exception("Test error")
+        
+        result = await product_service.get_product_by_id("P002")
+        
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_search_products_empty_result(self, product_service, mock_local_service):
+        """Test product search with empty result from local service"""
+        mock_local_service.search_products.return_value = []
+
+        result = await product_service.search_products("NonExistentProduct", 5)
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+        mock_local_service.search_products.assert_called_once_with("NonExistentProduct", 5)
+
+    @pytest.mark.asyncio
+    async def test_get_products_empty_result(self, product_service, mock_local_service):
+        """Test get_products with empty result from local service"""
+        mock_local_service.get_products.return_value = []
+
+        result = await product_service.get_products(search="NonExistentProduct")
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+        mock_local_service.get_products.assert_called_once_with(search="NonExistentProduct", limit=10)
+    
+    @pytest.mark.asyncio
+    async def test_search_products_with_limit(self, product_service, mock_local_service):
+        """Test successful product search with specified limit"""
+        mock_products = [
+            {"id": "P001", "name": "iPhone 15 Pro Max", "price": 21999000},
+            {"id": "P002", "name": "Samsung Galaxy S23", "price": 17999000}
+        ]
+        mock_local_service.search_products.return_value = mock_products[:1]  # Return only 1 product
+
+        result = await product_service.search_products("iPhone", 1)
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["id"] == "P001"  # Check if the correct product is returned
+        mock_local_service.search_products.assert_called_once_with("iPhone", 1)
+
+    @pytest.mark.asyncio
+    async def test_get_product_by_id_success(self, product_service, mock_local_service):
+        """Test successful retrieval of product by ID"""
+        mock_product = {"id": "P001", "name": "iPhone 15 Pro Max"}
+        mock_local_service.get_product_by_id.return_value = mock_product
+
+        logger.info(f"Attempting to get product with ID: P001") # Log before call
+        result = await product_service.get_product_by_id("P001")
+
+        assert isinstance(result, dict)
+        assert result["id"] == "P001"
+        mock_local_service.get_product_by_id.assert_called_once_with("P001")
+        logger.info(f"Successfully retrieved product: {result}") # Log success
+```
+
+---
+*Generated by Smart AI Bot*
