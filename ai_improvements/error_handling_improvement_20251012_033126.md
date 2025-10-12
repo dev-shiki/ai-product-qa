@@ -1,0 +1,126 @@
+# Error Handling Improvement
+
+**File**: `./frontend/streamlit_app.py`  
+**Time**: 03:31:26  
+**Type**: error_handling_improvement
+
+## Improvement
+
+```python
+import streamlit as st
+import requests
+import json
+from datetime import datetime
+import time
+
+# Configuration
+API_BASE_URL = "http://localhost:8000"
+
+def main():
+    st.set_page_config(
+        page_title="Product Assistant",
+        page_icon="🛍️",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Custom CSS for dark theme
+    st.markdown("""
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #ffffff;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        font-size: 1.1rem;
+        color: #bdc3c7;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .product-card {
+        border: 1px solid #34495e;
+        border-radius: 12px;
+        padding: 1.2rem;
+        margin: 0.8rem 0;
+        background: #2c3e50;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        transition: transform 0.2s ease;
+    }
+    .product-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .product-name {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #ffffff;
+    }
+    .product-description {
+        font-size: 0.9rem;
+        color: #bdc3c7;
+    }
+    .product-price {
+        font-size: 1rem;
+        font-weight: bold;
+        color: #f1c40f;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<h1 class='main-header'>Product Recommendation Assistant</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-header'>Find the best products tailored just for you.</p>", unsafe_allow_html=True)
+
+    # Sidebar for user input
+    with st.sidebar:
+        st.header("User Preferences")
+        user_id = st.text_input("Enter User ID:", value="user123")
+        num_recommendations = st.slider("Number of Recommendations:", min_value=1, max_value=10, value=5)
+        category_filter = st.text_input("Filter by Category (optional):")
+        price_range = st.slider("Price Range:", min_value=0, max_value=1000, value=(0, 1000))
+
+    # Construct the API request URL
+    url = f"{API_BASE_URL}/recommendations/{user_id}?num_recommendations={num_recommendations}"
+    if category_filter:
+        url += f"&category={category_filter}"
+    url += f"&min_price={price_range[0]}&max_price={price_range[1]}"
+
+    # Make the API request
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        recommendations = response.json()
+
+        if not recommendations:
+            st.warning("No recommendations found based on your criteria.")
+        else:
+            st.header("Recommended Products")
+            for product in recommendations:
+                with st.container():
+                    st.markdown(f"<div class='product-card'><p class='product-name'>{product['name']}</p><p class='product-description'>{product['description']}</p><p class='product-price'>Price: ${product['price']}</p></div>", unsafe_allow_html=True)
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"An error occurred while fetching recommendations: {e}")
+    except json.JSONDecodeError as e:
+        st.error(f"Error decoding JSON response: {e}")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Key improvements in error handling:
+
+* **Comprehensive Exception Handling:** The `try...except` block now covers `requests.exceptions.RequestException` to catch network-related errors (e.g., connection refused, timeout), `json.JSONDecodeError` to handle cases where the API returns invalid JSON, and a general `Exception` to catch any other unexpected errors. This is much more robust than handling only one specific error.
+* **`response.raise_for_status()`:** This crucial line is added to check for HTTP error codes (4xx or 5xx) returned by the API. If the API returns an error, `raise_for_status()` will raise an `HTTPError`, which is caught by the `requests.exceptions.RequestException` block.  This ensures that the code doesn't try to process a response that indicates a server-side or client-side problem.
+* **User-Friendly Error Messages:** The `st.error()` calls provide more informative error messages to the user, including the specific error that occurred. This makes it easier for the user (or developer) to diagnose the problem.
+* **Handles Empty Recommendations:**  Added a check for empty recommendations.  If the API returns an empty list, a warning is displayed instead of trying to iterate over nothing.
+
+This improved error handling makes the application significantly more reliable and user-friendly.  It anticipates various failure scenarios and provides helpful feedback to the user when things go wrong.
+
+---
+*Generated by Smart AI Bot*
