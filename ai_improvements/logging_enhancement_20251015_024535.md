@@ -1,0 +1,83 @@
+# Logging Enhancement
+
+**File**: `./app/services/ai_service.py`  
+**Time**: 02:45:35  
+**Type**: logging_enhancement
+
+## Improvement
+
+```python
+    async def get_response(self, question: str) -> str:
+        """Get AI response with product context and fallback message"""
+        try:
+            logger.info(f"Getting AI response for question: {question}")
+
+            # Ekstrak kategori dan max_price dari pertanyaan (sederhana)
+            import re
+            category = None
+            max_price = None
+            
+            # Deteksi kategori dengan lebih lengkap (sama dengan API endpoint)
+            question_lower = question.lower()
+            category_mapping = {
+                'laptop': ['laptop', 'notebook', 'komputer'],
+                'smartphone': ['smartphone', 'hp', 'handphone', 'phone', 'telepon', 'ponsel'],
+                'tablet': ['tablet', 'ipad'],
+                'headphone': ['headphone', 'earphone', 'headset', 'audio'],
+                'kamera': ['kamera', 'camera', 'fotografi'],
+                'audio': ['audio', 'speaker', 'sound'],
+                'tv': ['tv', 'televisi'],
+                'drone': ['drone', 'quadcopter'],
+                'jam': ['jam', 'watch', 'smartwatch']
+            }
+            
+            for cat, keywords in category_mapping.items():
+                if any(keyword in question_lower for keyword in keywords):
+                    category = cat
+                    break
+
+            # Ekstrak angka dari pertanyaan (untuk harga)
+            numbers = re.findall(r'\d+(?:\.\d+)?', question)
+            if numbers:
+                # Ambil angka terbesar sebagai max_price (asumsi)
+                max_price = max(map(float, numbers))
+
+            logger.info(f"Extracted category: {category}, max_price: {max_price} from question")
+            
+            product_context = await self.product_service.get_product_context(category=category, max_price=max_price)
+            
+            if not product_context:
+                logger.warning("No product context found, using fallback message.")
+                return "Maaf, saat ini kami tidak memiliki informasi produk yang sesuai dengan kriteria Anda."
+            
+            prompt = f"""Anda adalah asisten belanja. Jawab pertanyaan pengguna berdasarkan konteks produk berikut:
+            {product_context}
+            Jika pertanyaan tidak relevan dengan konteks produk, jawab dengan sopan bahwa Anda tidak dapat menjawabnya.
+            Pertanyaan: {question}"""
+            
+            try:
+                model = self.client.models.get("gemini-1.5-pro-latest")
+                response = model.generate_content(prompt)
+                logger.info(f"AI response generated successfully.")
+                return response.text
+            except Exception as e:
+                logger.error(f"Error generating AI response: {str(e)}")
+                return "Maaf, terjadi kesalahan dalam memproses permintaan Anda."
+        except Exception as e:
+            logger.exception(f"An unexpected error occurred in get_response: {str(e)}")
+            return "Maaf, terjadi kesalahan dalam memproses permintaan Anda."
+```
+
+Key changes and explanations:
+
+* **Comprehensive Logging:**  Added `logger.info()` statements to record the extracted `category` and `max_price` values. This helps in debugging and understanding what data is being used to filter products.
+* **Contextual Logging:** Logged when no product context is found and the fallback message is used.  This is *critical* for understanding why the AI might be giving generic answers.
+* **Error Logging Within the Inner `try` Block:**  Added `logger.error()` inside the `try` block that generates the AI response.  This isolates and logs errors specifically related to the Gemini API call.  It's important to distinguish these from other potential issues.
+* **Exception Logging:** Changed the outer `except` to `logger.exception`.  `logger.exception` *automatically* includes the traceback in the log message, which is invaluable for debugging unexpected errors. Using `logger.exception` is preferable to `logger.error` when you are in an `except` block because it captures the entire stack trace.
+* **Clarity and Consistency:**  Ensured that all logging statements are clear and provide sufficient information to understand the program's flow and any potential issues.  Used f-strings for easier string formatting.
+* **No Redundant Logging:** Avoided logging the same information multiple times.  Each log statement should provide unique and valuable insights.
+
+This revised answer provides a robust and informative logging system for the `get_response` function, making it easier to diagnose and resolve issues in the AI service.  The careful placement of log statements captures key data points and potential error conditions, ensuring that you have the information you need to keep the service running smoothly.
+
+---
+*Generated by Smart AI Bot*
